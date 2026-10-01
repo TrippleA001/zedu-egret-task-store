@@ -1,0 +1,35 @@
+name: build-contributors
+on:
+  repository_dispatch:
+    types: [contributor-update]
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - run: npm ci
+      - name: Build contributors page
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npx tsx scripts/build-contributors.ts
+      - name: Commit static page (retry on 409/conflict)
+        run: |
+          git config user.name "zedu-bot"
+          git config user.email "zedu-bot@users.noreply.github.com"
+          git add public/contributors/zedu-egret/index.html
+          git diff --cached --quiet && echo "no changes" && exit 0
+          git commit -m "chore: rebuild contributors directory [skip ci]"
+          for i in 1 2 3; do
+            git pull --rebase origin ${{ github.ref_name }} && git push origin HEAD:${{ github.ref_name }} && break || sleep 5
+          done

@@ -1,0 +1,21 @@
+# deps / build
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+# env (never commit real keys)
+.env
+.env.local
+.env*.local
+# supabase
+supabase/.branches
+supabase/.temp
+# misc
+.DS_Store
+*.log
+import.log
+public/contributors/
+# local data (may contain PII)
+roster.csv
+*.csv
+
