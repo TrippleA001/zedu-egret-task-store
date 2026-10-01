@@ -6,8 +6,8 @@ import {
   normalizeEmail,
   normalizeTelegram,
   normalizeZeduId,
-  isValidTelegram,
   sanitizeText,
+  telegramError,
 } from "@/lib/validation";
 
 // POST /api/onboarding/complete — atomically claim roster row + insert users row.
@@ -35,8 +35,8 @@ export async function POST(request: Request) {
 
     if (!workspace_email || !zedu_id || !full_name || !github_url || !telegram)
       return NextResponse.json({ error: "All fields are required" }, { status: 400 });
-    if (!isValidTelegram(telegram))
-      return NextResponse.json({ error: "Invalid Telegram handle (5-32 chars, letters/numbers/_)" }, { status: 400 });
+    const tgErr = telegramError(String(body?.telegram_handle || ""));
+    if (tgErr) return NextResponse.json({ error: tgErr }, { status: 400 });
     if (![1, 2, 3, 4, 5].includes(skill_rating))
       return NextResponse.json({ error: "skill_rating must be 1-5" }, { status: 400 });
     const required = ["telegram_announcement", "telegram_chat", "zedu_announcement", "zedu_egret"];

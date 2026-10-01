@@ -7,11 +7,25 @@ export function normalizeZeduId(s: string) {
 }
 
 export function normalizeTelegram(s: string) {
-  return s.trim().replace(/^@+/, "");
+  // Display name mode: free text as shown on the Telegram profile
+  // (e.g. "A Data Scientist"). Collapse extra whitespace, keep case/spaces.
+  return s.replace(/\s+/g, " ").trim().replace(/^@+/, "");
 }
 
 export function isValidTelegram(h: string) {
-  return /^[A-Za-z0-9_]{5,32}$/.test(h);
+  const t = h.trim();
+  return t.length >= 2 && t.length <= 100;
+}
+
+// Human-friendly error for display names.
+export function telegramError(raw: string): string | null {
+  const h = normalizeTelegram(raw);
+  if (!h) return "Please enter your Telegram display name as shown on your profile (e.g. A Data Scientist).";
+  if (h.length < 2)
+    return "That display name looks too short. Enter your full Telegram display name as shown on your profile.";
+  if (h.length > 100)
+    return "That display name is longer than 100 characters. Enter a shorter form of your Telegram display name.";
+  return null;
 }
 
 export function isHttpsUrl(u: string) {

@@ -59,8 +59,8 @@ export default function StepTwo({ prefill, workspaceEmail, zeduId, onBack }: {
             <Field label="Full name" hint="Pre-filled from roster, editable.">
               <input className={inputCls} value={fullName} onChange={(e) => setFullName(e.target.value)} />
             </Field>
-            <Field label="Telegram handle" hint="Without @, 5–32 chars.">
-              <input className={inputCls} value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="username" />
+            <Field label="Telegram display name" hint="As shown on your Telegram profile, e.g. A Data Scientist.">
+              <input className={inputCls} value={telegram} onChange={(e) => setTelegram(e.target.value)} placeholder="e.g. A Data Scientist" autoCapitalize="words" autoCorrect="off" spellCheck={false} maxLength={100} />
             </Field>
           </div>
           <div className="mt-5">

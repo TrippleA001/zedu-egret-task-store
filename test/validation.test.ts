@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseGithubRepo, isBlockedHost, isHttpsUrl, generateOrderNumber, normalizeEmail } from "../lib/validation";
+import { parseGithubRepo, isBlockedHost, isHttpsUrl, generateOrderNumber, normalizeEmail, normalizeTelegram, telegramError } from "../lib/validation";
 
 test("parseGithubRepo accepts full URL and short form", () => {
   assert.deepEqual(parseGithubRepo("https://github.com/octocat/hello-world"), { owner: "octocat", repo: "hello-world" });
@@ -27,4 +27,11 @@ test("order number format", () => {
 
 test("email normalize", () => {
   assert.equal(normalizeEmail("  Foo@Bar.COM "), "foo@bar.com");
+});
+
+test("telegram: display names accepted (spaces allowed)", () => {
+  assert.equal(telegramError("A Data Scientist"), null);
+  assert.equal(normalizeTelegram("  A   Data   Scientist  "), "A Data Scientist");
+  assert.ok((telegramError("") || "").includes("display name"));
+  assert.ok((telegramError("A") || "").includes("too short"));
 });
