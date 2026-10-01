@@ -2,6 +2,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
+import { Alert, Badge, Field, btnPrimary, btnSecondary, inputCls } from "./components/ui";
+import CartDrawer from "./components/cart-drawer";
 
 type Product = { id: string; title: string; description: string; price: string; stage_number: number };
 
@@ -55,43 +57,98 @@ export default function StorePage() {
     finally { setBusy(false); }
   };
 
+  const doneCount = stages.length;
+  const totalCount = products.length || 1;
+
   return (
-    <main className="container">
-      <h1>Zedu Egret Store</h1>
-      <p className="muted">Catalog -&gt; Cart -&gt; Checkout -&gt; Receipt. Milestones are $0.00 products.</p>
-      {receipt && <p className="success">Order {receipt} fulfilled! Receipt emailed to you.</p>}
-      <div className="grid grid-2">
-        {products.map((p) => {
-          const done = stages.includes(p.stage_number);
-          const open = unlocked(p.stage_number);
-          return (
-            <div key={p.id} className={`card ${open ? "" : "locked"}`}>
-              <h3>{p.title}</h3>
-              <p className="muted">{p.description}</p>
-              <p><b>${Number(p.price).toFixed(2)}</b> · Stage {p.stage_number}</p>
-              {done ? <p className="success">Completed ✓</p> : open ? (
-                <button className="btn" onClick={() => setCart(p)}>Add to Cart</button>
-              ) : <p className="muted">Locked — complete Stage {p.stage_number - 1} first</p>}
+    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
+      <p className="text-xs font-semibold uppercase tracking-widest text-brand">Task milestones</p>
+      <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">Stage products</h1>
+          <p className="mt-1 text-sm text-muted">
+            {products.length} products · {doneCount} of {products.length} complete · $0.00 milestones.
+          </p>
+        </div>
+        {products.length > 0 && (
+          <div className="flex items-center gap-2 text-[13px] text-muted">
+            <div className="h-2 w-40 overflow-hidden rounded-full bg-canvas ring-1 ring-inset ring-line">
+              <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${Math.round((doneCount / totalCount) * 100)}%` }} />
             </div>
-          );
-        })}
-      </div>
-      {cart && (
-        <div className="card" style={{ marginTop: 16 }}>
-          <h2>Checkout — {cart.title}</h2>
-          {msg && <p className="error">{msg}</p>}
-          <label>Deployed ToDo app URL (https, must return 200)</label>
-          <input value={todoUrl} onChange={(e) => setTodoUrl(e.target.value)} placeholder="https://your-todo-app.vercel.app" />
-          <label>Task GitHub repo URL (public, non-empty)</label>
-          <input value={repoUrl} onChange={(e) => setRepoUrl(e.target.value)} placeholder="https://github.com/you/task-repo" />
-          <div style={{ display: "flex", gap: 8 }}>
-            <button className="btn btn-secondary" onClick={() => setCart(null)}>Cancel</button>
-            <button className="btn" disabled={busy || !todoUrl || !repoUrl} onClick={checkout}>
-              {busy ? "Verifying..." : "Place Order ($0.00)"}
-            </button>
+            {Math.round((doneCount / totalCount) * 100)}%
           </div>
+        )}
+      </div>
+      {receipt && (
+        <div className="mt-6 rounded-xl border border-brand/25 bg-brand-tint p-5">
+          <p className="text-sm font-semibold text-brand-deep">Order fulfilled</p>
+          <p className="mt-1 font-mono text-xl font-bold tracking-tight text-ink">{receipt}</p>
+          <p className="mt-1 text-sm text-muted">Receipt emailed to you. Your contributor entry appears after the next rebuild.</p>
         </div>
       )}
-    </main>
+      {products.length === 0 ? (
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {[0, 1, 2].map((i) => (
+            <div key={i} className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
+              <div className="skeleton h-36 !rounded-none" />
+              <div className="space-y-2 p-5">
+                <div className="skeleton h-4 w-2/3" />
+                <div className="skeleton h-3 w-full" />
+                <div className="skeleton h-8 w-28" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {products.map((p) => {
+            const done = stages.includes(p.stage_number);
+            const open = unlocked(p.stage_number);
+            return (
+              <article key={p.id} className="flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-sm transition hover:shadow-md">
+                <div className={`relative flex h-36 items-center justify-center ${done || open ? "bg-brand-tint" : "bg-canvas"}`}>
+                  <span className={`text-6xl font-black tracking-tighter ${done || open ? "text-brand/20" : "text-muted/30"}`}>
+                    {String(p.stage_number).padStart(2, "0")}
+                  </span>
+                  <span className="absolute left-4 top-4">
+                    {done ? <Badge tone="done">Completed</Badge> : open ? <Badge tone="open">Available</Badge> : <Badge tone="locked">Locked</Badge>}
+                  </span>
+                </div>
+                <div className="flex flex-1 flex-col p-5">
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Zedu Egret · Stage {p.stage_number}</p>
+                  <h3 className="mt-1 text-base font-bold text-ink">{p.title}</h3>
+                  <p className="mt-1 line-clamp-3 text-sm text-muted">{p.description}</p>
+                  <p className="mt-3 text-[15px] font-bold text-ink">${Number(p.price).toFixed(2)}</p>
+                  <div className="mt-4">
+                    {done ? (
+                      <span className="inline-flex w-full items-center justify-center rounded-lg bg-canvas px-4 py-2.5 text-sm font-semibold text-muted">Completed</span>
+                    ) : open ? (
+                      <button className="inline-flex w-full items-center justify-center rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-black" onClick={() => setCart(p)}>Add to cart</button>
+                    ) : (
+                      <span className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-muted">
+                        Complete Stage {p.stage_number - 1} first
+                      </span>
+                    )}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+      {cart && (
+        <CartDrawer
+          cart={cart}
+          todoUrl={todoUrl}
+          repoUrl={repoUrl}
+          msg={msg}
+          busy={busy}
+          onTodo={setTodoUrl}
+          onRepo={setRepoUrl}
+          onClose={() => !busy && setCart(null)}
+          onCheckout={checkout}
+        />
+      )}
+    </div>
   );
 }
