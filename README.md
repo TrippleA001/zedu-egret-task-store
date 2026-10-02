@@ -3,6 +3,44 @@
 E-commerce metaphor (Catalog → Cart → Checkout → Order Receipt) where program
 milestones are zero-cost products. Next.js App Router + Supabase + Mailgun.
 
+## Contributors page publishing (cross-repo)
+
+The generated page lives in the staging frontend repo, not here. The GitHub Action
+(`.github/workflows/build-contributors.yml`) queries Supabase and publishes two files
+into `HNG-ZEDU-EGRET/zedu-fe@dev` via the GitHub Contents API — Coolify then redeploys.
+
+Target files:
+- `src/app/(homepage)/contributors/index.ts` — generated data
+- `src/app/(homepage)/contributors/page.tsx` — App Router page that renders it
+
+```bash
+npm run publish:contributors -- --dry-run   # preview, publishes nothing
+npm run publish:contributors                # publish to CONTRIBUTORS_REPO
+npm run preview:contributors                # local HTML preview only
+```
+
+Repo secrets (`Settings → Secrets and variables → Actions`):
+
+| Secret | Purpose |
+|---|---|
+| `CONTRIBUTORS_REPO_TOKEN` | Fine-grained PAT on `HNG-ZEDU-EGRET/zedu-fe`, **Contents: Read and write** |
+| `SUPABASE_URL` | Supabase project URL |
+| `SUPABASE_SERVICE_ROLE_KEY` | `sb_secret_…` value |
+
+Optional **Variables**: `CONTRIBUTORS_REPO`, `CONTRIBUTORS_REPO_BRANCH`, `CONTRIBUTORS_REPO_DIR`.
+
+Notes:
+- Output is deterministic (no timestamps), so a nightly run with no new submissions
+  produces no commit and no redeploy.
+- Stale-sha conflicts are retried, and `concurrency` serialises overlapping runs.
+- `[skip ci]` in the commit message prevents the fork's own CI from firing.
+
+## Resetting a test account
+
+`supabase/dev/reset_test_account.sql` clears a test user's submissions, orders,
+notifications and profile, and releases their `roster` claim so the same account can
+onboard again. The roster claim is **not** covered by any cascade.
+
 ## Migrations
 
 Run in order in the Supabase SQL Editor:

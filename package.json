@@ -8,7 +8,9 @@
     "start": "next start",
     "lint": "next lint",
     "test": "tsx --test test/*.test.ts",
-    "import:roster": "tsx scripts/import-roster.ts"
+    "import:roster": "tsx scripts/import-roster.ts",
+    "preview:contributors": "tsx scripts/build-contributors.ts",
+    "publish:contributors": "tsx scripts/publish-contributors.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",
