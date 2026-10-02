@@ -9,7 +9,8 @@ export async function POST(request: Request) {
     const body = await request.json();
     const email = normalizeEmail(String(body?.workspace_email || ""));
     const zid = normalizeZeduId(String(body?.zedu_id || ""));
-    if (!email || !zid) return NextResponse.json({ error: "workspace_email and zedu_id are required" }, { status: 400 });
+    if (!email || !zid)
+      return NextResponse.json({ error: "Select your registered email and enter your Zedu ID." }, { status: 400 });
 
     const sb = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -21,10 +22,10 @@ export async function POST(request: Request) {
       .eq("email", email)
       .maybeSingle();
     if (error) throw error;
-    if (!data) return NextResponse.json({ error: "Email not found in roster" }, { status: 404 });
-    if (data.claimed_by) return NextResponse.json({ error: "This email has already been claimed" }, { status: 409 });
+    if (!data) return NextResponse.json({ error: "No registration found for that email — check the spelling." }, { status: 404 });
+    if (data.claimed_by) return NextResponse.json({ error: "This email has already been claimed. Contact support." }, { status: 409 });
     if (normalizeZeduId(String(data.zedu_id)) !== zid)
-      return NextResponse.json({ error: "Zedu ID does not match this email" }, { status: 403 });
+      return NextResponse.json({ error: "That Zedu ID doesn't match this email. Check your registration email." }, { status: 403 });
 
     return NextResponse.json({
       ok: true,

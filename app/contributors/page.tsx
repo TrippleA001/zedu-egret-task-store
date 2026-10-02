@@ -68,7 +68,7 @@ export default async function ContributorsPage() {
       )}
 
       <div className="mt-8">
-        <Link href="/" className="inline-flex items-center justify-center rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm transition hover:bg-canvas">
+        <Link href="/" className="inline-flex items-center justify-center rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm transition hover:bg-canvas hover:no-underline">
           Back to catalog
         </Link>
       </div>

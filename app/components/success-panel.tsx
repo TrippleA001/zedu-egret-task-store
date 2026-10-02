@@ -36,7 +36,7 @@ export default function SuccessPanel({ orderNumber, stage, email }: {
             : "Receipt saved to your notifications bell (top-right). Email backup was unavailable."}
         </p>
         <div className="mt-4 flex flex-col gap-2 sm:flex-row">
-          <Link href="/contributors" className="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-hover">
+          <Link href="/contributors" className="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-hover hover:no-underline">
             View contributors
           </Link>
           <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })} className="inline-flex items-center justify-center rounded-lg border border-line bg-white px-4 py-2.5 text-sm font-semibold text-ink shadow-sm transition hover:bg-canvas">

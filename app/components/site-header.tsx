@@ -210,7 +210,7 @@ export default function SiteHeader({ cartCount, onCartOpen }: {
               )}
             </div>
           ) : (
-            <Link href="/login" className="rounded-xl bg-brand px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-brand-hover">Sign in</Link>
+            <Link href="/login" className="rounded-xl bg-brand px-4 py-2 text-[13px] font-semibold text-white shadow-sm transition hover:bg-brand-hover hover:no-underline">Sign in</Link>
           )}
         </div>
       </div>

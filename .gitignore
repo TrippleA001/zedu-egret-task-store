@@ -14,6 +14,8 @@ supabase/.temp
 .DS_Store
 *.log
 import.log
+# local screenshots taken for review
+Screenshot*.png
 public/contributors/
 # local data (may contain PII)
 roster.csv

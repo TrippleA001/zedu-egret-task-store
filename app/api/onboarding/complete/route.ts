@@ -59,10 +59,10 @@ export async function POST(request: Request) {
       .eq("email", workspace_email)
       .maybeSingle();
     if (rErr) throw rErr;
-    if (!row) return NextResponse.json({ error: "Email not found in roster" }, { status: 404 });
-    if (row.claimed_by) return NextResponse.json({ error: "This email has already been claimed" }, { status: 409 });
+    if (!row) return NextResponse.json({ error: "No registration found for that email — check the spelling." }, { status: 404 });
+    if (row.claimed_by) return NextResponse.json({ error: "This email has already been claimed. Contact support." }, { status: 409 });
     if (normalizeZeduId(String(row.zedu_id)) !== zedu_id)
-      return NextResponse.json({ error: "Zedu ID does not match this email" }, { status: 403 });
+      return NextResponse.json({ error: "That Zedu ID doesn't match this email. Check your registration email." }, { status: 403 });
 
     // Atomic claim (fails if raced)
     const { data: claimed, error: cErr } = await svc

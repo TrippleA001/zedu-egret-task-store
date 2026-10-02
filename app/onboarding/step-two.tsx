@@ -63,7 +63,7 @@ export default function StepTwo({ prefill, workspaceEmail, zeduId, onBack }: {
           <p className="mt-1 text-sm text-muted">Confirm your details and join every mandatory channel before continuing.</p>
           {msg && <div className="mt-4"><Alert kind="error">{msg}</Alert></div>}
           <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <Field label="Full name" hint="Pre-filled from roster, editable.">
+            <Field label="Full name" hint="Prefilled from your registration — edit if it's wrong.">
               <input className={inputCls} value={fullName} onChange={(e) => setFullName(e.target.value)} />
             </Field>
             <Field label="Telegram display name" hint="As shown on your Telegram profile, e.g. A Data Scientist.">
@@ -71,11 +71,18 @@ export default function StepTwo({ prefill, workspaceEmail, zeduId, onBack }: {
             </Field>
           </div>
           <div className="mt-5">
-            <Field label="GitHub URL" hint="Pre-filled from roster, editable.">
+            <Field label="GitHub URL" hint="Prefilled from your registration — edit if it's wrong.">
               <input className={inputCls} value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} placeholder="https://github.com/you" />
             </Field>
           </div>
-          <h3 className="mt-6 text-sm font-semibold text-ink">Mandatory channels <span className="font-normal text-muted">— tap Join for each channel first, then tick I&apos;ve joined ({channels.length}/4)</span></h3>
+          <h3 className="mt-6 text-sm font-semibold text-ink">
+            Mandatory channels{" "}
+            <span className="font-normal text-muted">
+              — tap <span className="font-semibold text-ink">Join</span> for each channel, then tick{" "}
+              <span className="font-semibold text-ink">I&apos;ve joined</span> (
+              <span className="font-semibold text-brand">{channels.length}/4</span>)
+            </span>
+          </h3>
           <div className="mt-3 space-y-2">
             {CHANNELS.map((c) => {
               const on = channels.includes(c.key);
@@ -93,19 +100,40 @@ export default function StepTwo({ prefill, workspaceEmail, zeduId, onBack }: {
                     <a
                       href={c.url} target="_blank" rel="noreferrer"
                       onClick={() => markVisited(c.key)}
-                      className="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-hover"
+                      aria-label={`Join ${c.label} (opens in new tab)`}
+                      className={
+                        seen
+                          // Demoted: the CTA has already been used, so stop
+                          // competing with the "I've joined" chip.
+                          ? "inline-flex items-center justify-center gap-1.5 rounded-lg border border-brand bg-white px-4 py-2 text-sm font-semibold text-brand-deep shadow-sm transition hover:bg-brand-tint hover:no-underline"
+                          // Loudest control in the row — deep green gives
+                          // white text a 10.2:1 contrast ratio.
+                          : "inline-flex items-center justify-center gap-1.5 rounded-lg bg-brand-deep px-5 py-2.5 text-[15px] font-bold tracking-wide text-white shadow-md ring-1 ring-brand-deep/30 transition hover:-translate-y-px hover:shadow-lg hover:no-underline"
+                      }
                     >
-                      Join →
+                      {seen ? "Reopen" : "Join"} <span aria-hidden>↗</span>
                     </a>
-                    <label className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-[13px] font-semibold transition ${!seen ? "cursor-not-allowed border-line bg-canvas text-muted" : on ? "border-brand bg-white text-brand-deep" : "border-line bg-white text-muted hover:border-muted/60 hover:text-ink"}`} title={!seen ? "Tap Join first" : "Tick after joining"}>
+                    <label
+                      className={
+                        !seen
+                          ? "inline-flex items-center gap-1.5 rounded-lg border border-dashed border-line bg-canvas px-3 py-2 text-[13px] font-semibold text-muted/70"
+                          : on
+                            // Solid green hero: the only saturated control in
+                            // the row once the link has been opened.
+                            ? "inline-flex items-center gap-1.5 rounded-lg border border-brand bg-brand px-3.5 py-2 text-[13px] font-bold text-white shadow-sm"
+                            : "inline-flex cursor-pointer items-center gap-1.5 rounded-lg border border-line bg-white px-3 py-2 text-[13px] font-semibold text-muted transition hover:border-muted/60 hover:text-ink"
+                      }
+                      title={!seen ? "Tap Join first" : on ? "Joined" : "Tick after joining"}
+                    >
                       <input
                         type="checkbox"
-                        className="h-4 w-4 cursor-pointer accent-[#008060] disabled:cursor-not-allowed"
+                        className={`h-4 w-4 accent-[#008060] disabled:cursor-not-allowed ${!seen ? "cursor-not-allowed" : "cursor-pointer"}`}
                         checked={on}
                         disabled={!seen}
                         onChange={() => toggle(c.key)}
                         aria-label={`I've joined ${c.label}`}
                       />
+                      {on && <span aria-hidden>✓</span>}
                       I&apos;ve joined
                     </label>
                   </div>

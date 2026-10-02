@@ -2,10 +2,16 @@ export function Field({ label, hint, children }: {
   label: string; hint?: string; children: React.ReactNode;
 }) {
   return (
-    <div>
+    /*
+     * flex-col + mt-auto bottom-aligns the control inside the cell, so inputs
+     * stay on one baseline even when one hint wraps to two lines and another
+     * doesn't. In non-grid contexts there is no free space, so mt-auto
+     * collapses to 0 and pt-1.5 preserves the original 6px gap.
+     */
+    <div className="flex flex-col">
       <label className="block text-sm font-medium text-ink">{label}</label>
       {hint && <p className="mt-0.5 text-[13px] text-muted">{hint}</p>}
-      <div className="mt-1.5">{children}</div>
+      <div className="mt-auto pt-1.5">{children}</div>
     </div>
   );
 }

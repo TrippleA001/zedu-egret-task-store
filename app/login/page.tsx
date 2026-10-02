@@ -22,7 +22,7 @@ export default function LoginPage() {
           </div>
           <h1 className="text-xl font-bold tracking-tight text-ink">Log in</h1>
           <p className="mt-1 text-sm text-muted">
-            Task verification &amp; onboarding portal. Use any Google account — you&apos;ll link your roster email next.
+            Task verification &amp; onboarding portal. Use any Google account — you&apos;ll link your registered email next.
           </p>
           <button
             onClick={login}
@@ -37,7 +37,7 @@ export default function LoginPage() {
             <span className="h-px flex-1 bg-line" />
           </div>
           <ol className="space-y-2 text-[13px] text-muted">
-            <li><span className="font-semibold text-ink">1.</span> Onboard — link your roster email + Zedu ID</li>
+            <li><span className="font-semibold text-ink">1.</span> Onboard — link your registered email + Zedu ID</li>
             <li><span className="font-semibold text-ink">2.</span> Shop milestones — $0.00 stage products</li>
             <li><span className="font-semibold text-ink">3.</span> Get receipt — <span className="font-mono">ZE-2026-XXXX</span></li>
           </ol>
