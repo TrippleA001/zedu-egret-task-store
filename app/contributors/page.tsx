@@ -1,20 +1,36 @@
 import Link from "next/link";
-import { createClient } from "@supabase/supabase-js";
 
 export const dynamic = "force-dynamic";
 
+/*
+ * Deliberately NOT using @supabase/supabase-js here: createClient() eagerly
+ * builds a RealtimeClient, which throws "Node.js detected but native WebSocket
+ * not found" on runtimes without a global WebSocket (Node < 22, some Vercel
+ * runtimes). This page only needs REST, so a plain fetch call is enough and
+ * works on any Node version. It also surfaces a clear message when the env
+ * vars are missing on the deployed host.
+ */
 async function loadContributors(): Promise<{ names: string[]; error: string | null }> {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
+  if (!url || !key) {
+    return { names: [], error: "Contributor list is not configured on this deployment." };
+  }
+
+  const endpoint = `${url}/rest/v1/submissions?stage_number=eq.1&select=stage_number,users!inner(full_name)&order=verified_at.asc`;
   try {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
-    if (!url || !key) return { names: [], error: "Database not configured." };
-    const sb = createClient(url, key);
-    const { data, error } = await sb
-      .from("submissions")
-      .select("stage_number, users!inner(full_name)")
-      .eq("stage_number", 1)
-      .order("verified_at", { ascending: true });
-    if (error) return { names: [], error: error.message };
+    const res = await fetch(endpoint, {
+      headers: {
+        apikey: key,
+        Authorization: `Bearer ${key}`,
+        Accept: "application/json",
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) {
+      return { names: [], error: `Supabase returned ${res.status}.` };
+    }
+    const data: any[] = await res.json();
     const names = (data || [])
       .map((r: any) => {
         const u = r?.users;
