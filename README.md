@@ -3,6 +3,18 @@
 E-commerce metaphor (Catalog → Cart → Checkout → Order Receipt) where program
 milestones are zero-cost products. Next.js App Router + Supabase + Mailgun.
 
+## Migrations
+
+Run in order in the Supabase SQL Editor:
+1. `supabase/migrations/001_init.sql` — roster, users, products, orders, submissions + RLS
+2. `supabase/migrations/002_notifications.sql` — in-account notifications (order receipts)
+
+## Opening Stage 2 later
+
+Stage 2 stays visible and **Unlocked** after Stage 1, but `Add to cart` is greyed out
+("opening soon"). To open it, set `2: true` in `lib/store.ts` → `STAGE_OPEN` and redeploy.
+The checkout API enforces the same map server-side (returns 423 otherwise).
+
 ## Quick start
 
 ```bash

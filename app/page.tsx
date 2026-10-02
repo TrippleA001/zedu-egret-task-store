@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
 import { isStagePurchasable, STAGE2_CLOSED_MSG } from "@/lib/store";
@@ -65,32 +66,39 @@ export default function StorePage() {
   const totalCount = products.length || 1;
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
-      <p className="text-xs font-semibold uppercase tracking-widest text-brand">Task milestones</p>
-      <div className="mt-1 flex flex-wrap items-end justify-between gap-3">
+    <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
+      <nav className="text-[13px] font-medium text-muted" aria-label="Breadcrumb">
+        <Link href="/" className="text-muted">Home</Link> <span aria-hidden>/</span> <span className="text-ink">Task milestones</span>
+      </nav>
+      <div className="mt-4 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-6">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-ink sm:text-3xl">Stage products</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">Stage products</h1>
           <p className="mt-1 text-sm text-muted">
-            {products.length} products · {doneCount} of {products.length} complete · $0.00 milestones.
+            {products.length} product{products.length === 1 ? "" : "s"} · {doneCount} complete · {products.length - doneCount} remaining · milestones are $0.00
           </p>
         </div>
         {products.length > 0 && (
-          <div className="flex items-center gap-2 text-[13px] text-muted">
-            <div className="h-2 w-40 overflow-hidden rounded-full bg-canvas ring-1 ring-inset ring-line">
-              <div className="h-full rounded-full bg-brand transition-all" style={{ width: `${Math.round((doneCount / totalCount) * 100)}%` }} />
+          <div className="flex items-center gap-3 text-[13px] font-semibold text-muted">
+            <span>Progress</span>
+            <div className="h-2 w-32 overflow-hidden rounded-full bg-canvas ring-1 ring-inset ring-line sm:w-40">
+              <div className="h-full rounded-full bg-brand transition-all duration-500" style={{ width: `${Math.round((doneCount / totalCount) * 100)}%` }} />
             </div>
-            {Math.round((doneCount / totalCount) * 100)}%
+            <span className="text-ink">{Math.round((doneCount / totalCount) * 100)}%</span>
           </div>
         )}
       </div>
       {receipt && (
         <SuccessPanel orderNumber={receipt} stage={1} email={receiptEmail} />
       )}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted">
+        <p>{products.length} item{products.length === 1 ? "" : "s"}</p>
+        <p>Sorted by stage</p>
+      </div>
       {products.length === 0 ? (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
           {[0, 1, 2].map((i) => (
             <div key={i} className="overflow-hidden rounded-xl border border-line bg-white shadow-sm">
-              <div className="skeleton h-36 !rounded-none" />
+              <div className="skeleton h-40 !rounded-none" />
               <div className="space-y-2 p-5">
                 <div className="skeleton h-4 w-2/3" />
                 <div className="skeleton h-3 w-full" />
@@ -100,15 +108,15 @@ export default function StorePage() {
           ))}
         </div>
       ) : (
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {products.map((p) => {
             const done = stages.includes(p.stage_number);
             const open = unlocked(p.stage_number);
             const purchasable = isStagePurchasable(p.stage_number);
             return (
-              <article key={p.id} className="flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-sm transition hover:shadow-md">
-                <div className={`relative flex h-36 items-center justify-center ${done || open ? "bg-brand-tint" : "bg-canvas"}`}>
-                  <span className={`text-6xl font-black tracking-tighter ${done || open ? "text-brand/20" : "text-muted/30"}`}>
+              <article key={p.id} className="group flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-muted/40 hover:shadow-lg">
+                <div className={`relative flex h-40 items-center justify-center overflow-hidden ${done || open ? "bg-brand-tint" : "bg-canvas"}`}>
+                  <span className={`text-6xl font-black tracking-tighter transition-transform duration-300 group-hover:scale-110 ${done || open ? "text-brand/20" : "text-muted/30"}`}>
                     {String(p.stage_number).padStart(2, "0")}
                   </span>
                   <span className="absolute left-4 top-4">
