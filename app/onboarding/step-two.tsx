@@ -21,13 +21,20 @@ export default function StepTwo({ prefill, workspaceEmail, zeduId, onBack }: {
   const [githubUrl, setGithubUrl] = useState(prefill.github_url);
   const [telegram, setTelegram] = useState("");
   const [channels, setChannels] = useState<string[]>([]);
+  const [visited, setVisited] = useState<string[]>([]);
   const [skill, setSkill] = useState(0);
   const [phase, setPhase] = useState<"profile" | "skill">("profile");
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const toggle = (k: string) =>
+  const markVisited = (k: string) =>
+    setVisited((v) => (v.includes(k) ? v : [...v, k]));
+
+  const toggle = (k: string) => {
+    // Join-first: the checkbox only works after the Join button was opened.
+    if (!channels.includes(k) && !visited.includes(k)) return;
     setChannels((c) => (c.includes(k) ? c.filter((x) => x !== k) : [...c, k]));
+  };
 
   const submit = async () => {
     setBusy(true); setMsg("");
@@ -68,29 +75,41 @@ export default function StepTwo({ prefill, workspaceEmail, zeduId, onBack }: {
               <input className={inputCls} value={githubUrl} onChange={(e) => setGithubUrl(e.target.value)} placeholder="https://github.com/you" />
             </Field>
           </div>
-          <h3 className="mt-6 text-sm font-semibold text-ink">Mandatory channels <span className="font-normal text-muted">— open each link &amp; join, then tick all ({channels.length}/4)</span></h3>
-          <div className="mt-3 divide-y divide-line rounded-xl border border-line">
+          <h3 className="mt-6 text-sm font-semibold text-ink">Mandatory channels <span className="font-normal text-muted">— tap Join for each channel first, then tick I&apos;ve joined ({channels.length}/4)</span></h3>
+          <div className="mt-3 space-y-2">
             {CHANNELS.map((c) => {
               const on = channels.includes(c.key);
+              const seen = visited.includes(c.key) || on;
               return (
-                <label key={c.key} className={`flex cursor-pointer items-center gap-3 px-4 py-3 transition ${on ? "bg-brand-tint/60" : "bg-white hover:bg-canvas/60"}`}>
-                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-sm font-black ${on ? "bg-brand text-white" : "bg-canvas text-muted"}`}>
+                <div key={c.key} className={`flex flex-col gap-3 rounded-xl border p-4 transition sm:flex-row sm:items-center ${on ? "border-brand bg-brand-tint/50" : "border-line bg-white"}`}>
+                  <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-sm font-black ${on ? "bg-brand text-white" : "bg-canvas text-muted"}`}>
                     {CHANNEL_TILE[c.key] ?? "•"}
                   </span>
                   <span className="min-w-0 flex-1">
-                    <span className="block truncate text-sm font-semibold text-ink">{c.label}</span>
-                    <a href={c.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} className="block truncate text-[13px]">
-                      Open invite link
-                    </a>
+                    <span className="block text-sm font-semibold text-ink">{c.label}</span>
+                    <span className="block text-[13px] text-muted">{seen ? "Opened — complete joining, then tick the box." : "Tap Join first, then tick the box."}</span>
                   </span>
-                  <input
-                    type="checkbox"
-                    className="h-5 w-5 shrink-0 cursor-pointer accent-[#008060]"
-                    checked={on}
-                    onChange={() => toggle(c.key)}
-                    aria-label={`Confirm joined ${c.label}`}
-                  />
-                </label>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={c.url} target="_blank" rel="noreferrer"
+                      onClick={() => markVisited(c.key)}
+                      className="inline-flex items-center justify-center rounded-lg bg-brand px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-hover"
+                    >
+                      Join →
+                    </a>
+                    <label className={`inline-flex cursor-pointer items-center gap-1.5 rounded-lg border px-3 py-2 text-[13px] font-semibold transition ${!seen ? "cursor-not-allowed border-line bg-canvas text-muted" : on ? "border-brand bg-white text-brand-deep" : "border-line bg-white text-muted hover:border-muted/60 hover:text-ink"}`} title={!seen ? "Tap Join first" : "Tick after joining"}>
+                      <input
+                        type="checkbox"
+                        className="h-4 w-4 cursor-pointer accent-[#008060] disabled:cursor-not-allowed"
+                        checked={on}
+                        disabled={!seen}
+                        onChange={() => toggle(c.key)}
+                        aria-label={`I've joined ${c.label}`}
+                      />
+                      I&apos;ve joined
+                    </label>
+                  </div>
+                </div>
               );
             })}
           </div>

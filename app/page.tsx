@@ -2,8 +2,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
-import { Alert, Badge, Field, btnPrimary, btnSecondary, inputCls } from "./components/ui";
+import { isStagePurchasable, STAGE2_CLOSED_MSG } from "@/lib/store";
+import { Alert, Badge, btnSecondary, inputCls } from "./components/ui";
 import CartDrawer from "./components/cart-drawer";
+import SuccessPanel from "./components/success-panel";
 
 type Product = { id: string; title: string; description: string; price: string; stage_number: number };
 
@@ -18,6 +20,7 @@ export default function StorePage() {
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState("");
+  const [receiptEmail, setReceiptEmail] = useState("");
 
   useEffect(() => {
     (async () => {
@@ -51,6 +54,7 @@ export default function StorePage() {
       const j = await r.json();
       if (!r.ok) throw new Error(j.error || "Checkout failed");
       setReceipt(j.order_number);
+      setReceiptEmail(j.email || "skipped");
       setStages((s) => [...s, cart.stage_number]);
       setCart(null); setTodoUrl(""); setRepoUrl("");
     } catch (e: any) { setMsg(e.message); }
@@ -80,11 +84,7 @@ export default function StorePage() {
         )}
       </div>
       {receipt && (
-        <div className="mt-6 rounded-xl border border-brand/25 bg-brand-tint p-5">
-          <p className="text-sm font-semibold text-brand-deep">Order fulfilled</p>
-          <p className="mt-1 font-mono text-xl font-bold tracking-tight text-ink">{receipt}</p>
-          <p className="mt-1 text-sm text-muted">Receipt emailed to you. Your contributor entry appears after the next rebuild.</p>
-        </div>
+        <SuccessPanel orderNumber={receipt} stage={1} email={receiptEmail} />
       )}
       {products.length === 0 ? (
         <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -104,6 +104,7 @@ export default function StorePage() {
           {products.map((p) => {
             const done = stages.includes(p.stage_number);
             const open = unlocked(p.stage_number);
+            const purchasable = isStagePurchasable(p.stage_number);
             return (
               <article key={p.id} className="flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-sm transition hover:shadow-md">
                 <div className={`relative flex h-36 items-center justify-center ${done || open ? "bg-brand-tint" : "bg-canvas"}`}>
@@ -111,19 +112,29 @@ export default function StorePage() {
                     {String(p.stage_number).padStart(2, "0")}
                   </span>
                   <span className="absolute left-4 top-4">
-                    {done ? <Badge tone="done">Completed</Badge> : open ? <Badge tone="open">Available</Badge> : <Badge tone="locked">Locked</Badge>}
+                    {done ? <Badge tone="done">Completed</Badge> : open ? (purchasable ? <Badge tone="open">Available</Badge> : <Badge tone="open">Unlocked</Badge>) : <Badge tone="locked">Locked</Badge>}
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col p-5">
                   <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Zedu Egret · Stage {p.stage_number}</p>
                   <h3 className="mt-1 text-base font-bold text-ink">{p.title}</h3>
                   <p className="mt-1 line-clamp-3 text-sm text-muted">{p.description}</p>
-                  <p className="mt-3 text-[15px] font-bold text-ink">${Number(p.price).toFixed(2)}</p>
+                  <div className="mt-3 flex items-center gap-2">
+                    <span className="text-[15px] font-bold text-ink">${Number(p.price).toFixed(2)}</span>
+                    <span className="rounded-full bg-brand-tint px-2 py-0.5 text-[11px] font-bold text-brand-deep">Free</span>
+                  </div>
                   <div className="mt-4">
                     {done ? (
                       <span className="inline-flex w-full items-center justify-center rounded-lg bg-canvas px-4 py-2.5 text-sm font-semibold text-muted">Completed</span>
-                    ) : open ? (
+                    ) : open && purchasable ? (
                       <button className="inline-flex w-full items-center justify-center rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-black" onClick={() => setCart(p)}>Add to cart</button>
+                    ) : open ? (
+                      <div>
+                        <span className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-muted" title={STAGE2_CLOSED_MSG}>
+                          Add to cart — opening soon
+                        </span>
+                        <p className="mt-1.5 text-center text-[12px] text-muted">Complete your individual task. Group task opens soon.</p>
+                      </div>
                     ) : (
                       <span className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-muted">
                         Complete Stage {p.stage_number - 1} first

@@ -13,25 +13,46 @@ export async function fetchWithTimeout(url: string, ms: number) {
   }
 }
 
-export async function sendReceiptEmail(to: string, cc: string | null, orderNumber: string, stage: number) {
+export type EmailStatus = "sent" | "skipped" | "failed";
+
+export function receiptText(orderNumber: string, stage: number) {
+  return (
+    `Hi,\n\nYour Stage ${stage} verification order ${orderNumber} is FULFILLED.\n\n` +
+    `Your name will be added to the contributors list for stage 2 group task, keep working on your individual task.\n\n` +
+    `— Zedu Egret Store`
+  );
+}
+
+export async function sendReceiptEmail(to: string, cc: string | null, orderNumber: string, stage: number): Promise<EmailStatus> {
   const key = process.env.MAILGUN_API_KEY;
   const domain = process.env.MAILGUN_DOMAIN;
   const from = process.env.MAILGUN_FROM || `no-reply@${domain}`;
-  if (!key || !domain || key.includes("placeholder")) {
-    console.log(`[mailgun:skip] to=${to} order=${orderNumber}`);
-    return;
+  if (!key || !domain || key.includes("placeholder") || domain.includes("example.com")) {
+    console.log(`[mailgun:skip] to=${to} order=${orderNumber} (no live domain configured)`);
+    return "skipped";
   }
   const form = new URLSearchParams();
   form.set("from", `Zedu Egret Store <${from}>`);
   form.set("to", to);
   if (cc && cc.toLowerCase() !== to.toLowerCase()) form.append("cc", cc);
   form.set("subject", `Order ${orderNumber} fulfilled - Stage ${stage}`);
-  form.set("text", `Hi,\n\nYour Stage ${stage} verification order ${orderNumber} is FULFILLED.\n\n- Zedu Egret Store`);
-  await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
-    method: "POST",
-    headers: { Authorization: "Basic " + Buffer.from(`api:${key}`).toString("base64") },
-    body: form,
-  }).catch((e) => console.error("[mailgun:error]", e));
+  form.set("text", receiptText(orderNumber, stage));
+  try {
+    const res = await fetch(`https://api.mailgun.net/v3/${domain}/messages`, {
+      method: "POST",
+      headers: { Authorization: "Basic " + Buffer.from(`api:${key}`).toString("base64") },
+      body: form,
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.error(`[mailgun:failed] status=${res.status} to=${to} order=${orderNumber} body=${body.slice(0, 300)}`);
+      return "failed";
+    }
+    return "sent";
+  } catch (e) {
+    console.error("[mailgun:error]", e);
+    return "failed";
+  }
 }
 
 export function triggerContributorsBuild(payload: object) {

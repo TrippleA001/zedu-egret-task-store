@@ -4,6 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { isBlockedHost, isHttpsUrl, parseGithubRepo, generateOrderNumber } from "@/lib/validation";
 import { fetchWithTimeout, sendReceiptEmail, triggerContributorsBuild } from "@/lib/side-effects";
+import { STAGE2_CLOSED_MSG, isStagePurchasable } from "@/lib/store";
 
 export async function POST(request: Request) {
   try {
@@ -42,6 +43,10 @@ export async function POST(request: Request) {
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
     if (Number(product.stage_number) !== stageNumber)
       return NextResponse.json({ error: "stageNumber mismatch" }, { status: 400 });
+
+    // Purchasable gate: Stage 2+ stays visible+unlocked but greyed out until opened.
+    if (!isStagePurchasable(stageNumber))
+      return NextResponse.json({ error: STAGE2_CLOSED_MSG }, { status: 423 });
 
     if (stageNumber > 1) {
       const { data: prev } = await svc.from("submissions").select("id")
@@ -91,11 +96,27 @@ export async function POST(request: Request) {
     }
     if (!orderId) throw new Error("Could not create order");
 
-    const { data: prof } = await svc.from("users").select("auth_email, workspace_email").eq("id", userId).maybeSingle();
-    if (prof) sendReceiptEmail(prof.auth_email, prof.workspace_email, orderNumber, stageNumber);
+    const { data: prof } = await svc.from("users").select("auth_email, workspace_email, full_name").eq("id", userId).maybeSingle();
+
+    // In-account notification (mirrors the email — sandbox domains only
+    // deliver to authorized recipients, so the inbox is the real channel).
+    const notifBody = prof
+      ? `Hi ${prof.full_name || ""},\n\nYour Stage ${stageNumber} verification order ${orderNumber} is FULFILLED.\n\nYour name will be added to the contributors list for stage 2 group task, keep working on your individual task.\n\n— Zedu Egret Store`
+      : `Your Stage ${stageNumber} verification order ${orderNumber} is FULFILLED.\n\nYour name will be added to the contributors list for stage 2 group task, keep working on your individual task.`;
+    const { error: nErr } = await svc.from("notifications").insert({
+      user_id: userId,
+      kind: "order_fulfilled",
+      title: `Stage ${stageNumber} complete — order ${orderNumber}`,
+      body: notifBody,
+      order_number: orderNumber,
+    });
+    if (nErr) console.error("[notifications:insert-failed]", nErr.message);
+
+    let email: "sent" | "skipped" | "failed" = "skipped";
+    if (prof) email = await sendReceiptEmail(prof.auth_email, prof.workspace_email, orderNumber, stageNumber);
     triggerContributorsBuild({ event_type: "contributor-update", client_payload: { user_id: userId, stage_number: stageNumber, order_number: orderNumber } });
 
-    return NextResponse.json({ ok: true, orderId, order_number: orderNumber });
+    return NextResponse.json({ ok: true, orderId, order_number: orderNumber, email });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "checkout failed" }, { status: 500 });
   }

@@ -35,7 +35,11 @@ export default function OnboardingPage() {
     const t = setTimeout(async () => {
       const r = await fetch(`/api/roster/emails?q=${encodeURIComponent(q)}&limit=50`);
       const j = await r.json();
-      if (j.items) setOptions(j.items);
+      if (j.items) {
+        setOptions(j.items);
+        // Auto-select when the search narrows to a single match
+        if (j.items.length === 1) setWorkspaceEmail(j.items[0].email);
+      }
     }, 300);
     return () => clearTimeout(t);
   }, [q]);
@@ -61,7 +65,7 @@ export default function OnboardingPage() {
       <p className="text-xs font-semibold uppercase tracking-widest text-brand">Intern onboarding</p>
       <h1 className="mt-1 text-2xl font-bold tracking-tight text-ink sm:text-3xl">Set up your store account</h1>
       <div className="mt-4 rounded-lg border border-line bg-canvas px-4 py-3 text-sm text-muted">
-        Logged in as <span className="font-semibold text-ink">{authEmail || "..."}</span> (Google session). Now link your roster identity below — your login Gmail may differ from your roster email.
+        Signed in as <span className="font-semibold text-ink">{authEmail || "..."}</span> with Google. Now find the email address you registered with below — it may be different from your Google login.
       </div>
       <div className="mt-6">
         <Stepper steps={["Identity", "Profile & channels", "Technical level"]} current={step} />
@@ -69,19 +73,36 @@ export default function OnboardingPage() {
       <div className="mt-6">{msg && <Alert kind={msg.kind as "error" | "success"}>{msg.text}</Alert>}</div>
       {step === 1 && (
         <div className="mt-4 rounded-xl border border-line bg-white p-6 shadow-sm sm:p-8">
-          <h2 className="text-lg font-bold text-ink">Identity confirmation</h2>
-          <p className="mt-1 text-sm text-muted">Select the roster email issued to you and confirm it with your Zedu ID.</p>
-          <div className="mt-5 grid gap-5 sm:grid-cols-2">
-            <Field label="Search your roster email">
-              <input className={inputCls} placeholder="Type to filter..." value={q} onChange={(e) => setQ(e.target.value)} />
-            </Field>
-            <Field label="Workspace email">
-              <select className={inputCls} value={workspaceEmail} onChange={(e) => setWorkspaceEmail(e.target.value)}>
-                <option value="">Select your email</option>
+          <h2 className="text-lg font-bold text-ink">Find your registration</h2>
+          <p className="mt-1 text-sm text-muted">Type your registration email to find it, then confirm it with your Zedu ID.</p>
+          <div className="mt-5">
+            <Field label="Registration email" hint="The email you registered with. Start typing below to find it — it may differ from your Google login.">
+              <input
+                className={inputCls}
+                placeholder="Start typing your registration email..."
+                value={q}
+                onChange={(e) => { setQ(e.target.value); setWorkspaceEmail(""); }}
+                list="registration-emails"
+                autoComplete="off"
+              />
+              <datalist id="registration-emails">
                 {options.map((o) => (
-                  <option key={o.email} value={o.email}>{o.email}{o.hint ? ` — ${o.hint}` : ""}</option>
+                  <option key={o.email} value={o.email}>{o.hint || o.email}</option>
                 ))}
-              </select>
+              </datalist>
+              {workspaceEmail ? (
+                <p className="mt-1.5 rounded-lg border border-brand/25 bg-brand-tint px-3 py-2 text-[13px] font-medium text-brand-deep">
+                  Selected: {workspaceEmail}
+                </p>
+              ) : (
+                q.trim() && (
+                  <p className="mt-1.5 text-[13px] text-muted">
+                    {options.length === 0
+                      ? "No match found — check the spelling of your registration email."
+                      : `${options.length} match${options.length === 1 ? "" : "es"} — keep typing or pick from the suggestions.`}
+                  </p>
+                )
+              )}
             </Field>
           </div>
           <div className="mt-5">
