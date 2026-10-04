@@ -14,11 +14,11 @@ on:
       branch:
         description: "Target branch"
         required: false
-        default: "dev"
+        default: "staging"
       dir:
         description: "Target directory inside the repo"
         required: false
-        default: "src/app/(homepage)/contributors"
+        default: "src/app/(homepage)/contributors/egrets"
 
 permissions:
   contents: read
@@ -46,6 +46,6 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           CONTRIBUTORS_REPO_TOKEN: ${{ secrets.CONTRIBUTORS_REPO_TOKEN }}
           CONTRIBUTORS_REPO: ${{ inputs.repo || vars.CONTRIBUTORS_REPO || 'HNG-ZEDU-EGRET/zedu-fe' }}
-          CONTRIBUTORS_REPO_BRANCH: ${{ inputs.branch || vars.CONTRIBUTORS_REPO_BRANCH || 'dev' }}
-          CONTRIBUTORS_REPO_DIR: ${{ inputs.dir || vars.CONTRIBUTORS_REPO_DIR || 'src/app/(homepage)/contributors' }}
+          CONTRIBUTORS_REPO_BRANCH: ${{ inputs.branch || vars.CONTRIBUTORS_REPO_BRANCH || 'staging' }}
+          CONTRIBUTORS_REPO_DIR: ${{ inputs.dir || vars.CONTRIBUTORS_REPO_DIR || 'src/app/(homepage)/contributors/egrets' }}
         run: npx tsx scripts/publish-contributors.ts
