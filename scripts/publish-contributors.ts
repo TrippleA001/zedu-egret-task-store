@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs";
 import { config as dotenv } from "dotenv";
 import { buildArtifacts, joinRepoPath, encodeRepoPath, renderHtmlPreview } from "./lib/contributors";
-import { fetchContributorNames } from "./lib/fetch-names";
+import { fetchContributors } from "./lib/fetch-names";
 import { publishFile } from "./lib/github-contents";
 
 // Publish the contributors page into the staging frontend repo
@@ -20,9 +20,9 @@ import { publishFile } from "./lib/github-contents";
 //   NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SECRET_KEY
 
 const DEFAULT_REPO = "HNG-ZEDU-EGRET/zedu-fe";
-const DEFAULT_BRANCH = "dev";
-const DEFAULT_DIR = "src/app/(homepage)/contributors";
-const COMMIT_MESSAGE = "chore: rebuild contributors directory [skip ci]";
+const DEFAULT_BRANCH = "staging";
+const DEFAULT_DIR = "src/app/(homepage)/contributors/egrets";
+const COMMIT_MESSAGE = "chore: rebuild contributors directory with updated team members details ";
 
 async function main() {
   dotenv({ path: ".env.local" });
@@ -36,15 +36,15 @@ async function main() {
 
   console.log(`Target: ${repo}@${branch} :: ${dir}${dryRun ? "  [dry-run]" : ""}`);
 
-  const names = await fetchContributorNames();
-  console.log(`Found ${names.length} Stage 1 contributor(s).`);
+  const entries = await fetchContributors();
+  console.log(`Found ${entries.length} Stage 1 contributor(s).`);
 
-  const artifacts = buildArtifacts(names);
+  const artifacts = buildArtifacts(entries);
 
   // Always refresh the local preview so `build-contributors` stays useful.
   const previewDir = path.join(process.cwd(), "public", "contributors", "zedu-egret");
   fs.mkdirSync(previewDir, { recursive: true });
-  fs.writeFileSync(path.join(previewDir, "index.html"), renderHtmlPreview(names));
+  fs.writeFileSync(path.join(previewDir, "index.html"), renderHtmlPreview(entries));
 
   if (dryRun) {
     for (const [file, content] of Object.entries(artifacts)) {
