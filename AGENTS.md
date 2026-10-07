@@ -1,32 +1,137 @@
-# Product Requirement Document (PRD)
+# AGENTS.md — Zedu Egret Store
 
-## Project Title: Zedu Egret Store (Task Verification & Onboarding Platform)
+Instructions for AI coding agents working in `task_commerce/`
+(Next.js 14 App Router, React 18, TypeScript, Supabase, npm).
 
-**Version:** 1.0.0
+**Read [`PRD.md`](./PRD.md) for product intent and [`README.md`](./README.md) for
+setup/runbook. This file is the agent working guide: layout, commands,
+conventions, and the cart-sync architecture. Where the two disagree,
+`PRD.md` wins on product; this file wins on workflow.**
 
-**Author:** Senior Technical Product Manager
+## Hard rules
 
-**Status:** Approved for Implementation
+- Work on a ticket branch in the contributor's fork. Never push to
+  `dev`/`central-staging`/`staging`/`main` directly; PRs go into
+  `zedu-hng/<repo>:dev`. One ticket = one branch = one PR = one author.
+- Keep the change to what the ticket asks. No drive-by refactors, renames,
+  or dependency bumps.
+- One logical change per PR, at most ~400 lines of meaningful code
+  (lockfiles and generated output don't count). The app must still work
+  after it merges.
+- Don't edit protected files (`.github/`, tooling config, this file) without
+  reviewer agreement. Full list follows the bootcamp `CONTRIBUTING.md` pattern.
+- Never commit `.env`, `.env.local`, `*.pem`, credential JSON, `roster.csv`,
+  or files over 1 MB (see `.gitignore` — all covered).
+- Never hardcode public config beyond what `NEXT_PUBLIC_*` already carries.
+  Secrets (`SUPABASE_SECRET_KEY`, `GITHUB_PAT`, Mailgun keys) stay
+  server-side only — never in browser code, logs, or commits.
+- Never put full `https://…` profile links in contributor-adjacent data where
+  a username suffices (review-bot `hardcodedUrls` rule).
 
-**Target Architecture:** Next.js (App Router), Supabase (PostgreSQL + Auth), GCP / Mailgun, GitHub Actions
+## Layout
 
-## 1. Executive Summary & Goals
+| Path | Holds |
+|---|---|
+| `app/page.tsx` | Storefront (catalog grid, cart state via `useCart`, checkout call) |
+| `app/components/cart-drawer.tsx` | Cart/checkout drawer (dumb UI: product + URLs + buttons) |
+| `app/components/success-panel.tsx`, `site-header.tsx`, `ui.tsx` | Receipt panel, header, shared primitives |
+| `app/login/`, `app/onboarding/`, `app/contributors/` | Auth entry, 3-step wizard, contributor listing |
+| `app/auth/callback/` | Supabase OAuth callback route |
+| `app/api/checkout|products|orders|notifications|onboarding/*|roster/emails/` | API routes — validation + writes live here |
+| `lib/api-auth.ts` | Shared auth: cookie session first, then Bearer token |
+| `lib/use-cart.ts` | Cross-device cart hook: Supabase row + Realtime subscription |
+| `lib/store.ts` | `STAGE_OPEN` availability map + `isStagePurchasable()` |
+| `lib/validation.ts` | Pure validators (URLs, GitHub, roster fields) — safe to share with mobile |
+| `lib/supabase-client.ts`, `lib/supabase-server.ts` | Browser + server Supabase clients |
+| `lib/side-effects.ts`, `lib/constants.ts` | Mailgun, webhooks, timeouts, shared constants |
+| `supabase/migrations/00N_*.sql` | Run **in order** in Supabase SQL Editor (`003_cart.sql` after `002`) |
+| `scripts/` | `import-roster.ts`, `build-contributors.ts`, `publish-contributors.ts` (tsx) |
+| `test/*.test.ts` | Node tests via `tsx --test` |
 
-### 1.1 Overview
+## Commands
 
-The **Zedu Egret Store** is a specialized task verification and contributor onboarding portal designed to handle administrative workflows for 80+ interns. To streamline onboarding and submission tracking, the platform leverages an **e-commerce metaphor** (Catalog → Cart → Checkout → Order Receipt) where administrative task milestones act as zero-cost products.
+```sh
+npm install          # deps (npm only — no pnpm/yarn files in this repo)
+npm run dev          # next dev → http://localhost:3000
+npx tsc --noEmit     # typecheck
+npm test             # tsx --test test/*.test.ts
+npm run build        # production build
+npm run import:roster ./roster.csv
+npm run preview:contributors   # local HTML preview only
+npm run publish:contributors -- --dry-run
+```
 
-### 1.2 Core Objectives
+`.env.local` never committed. Run gates (types + tests + build) before
+declaring a change done. If standalone `tsc --noEmit` fails only on stale
+`.next/types/**` paths, run `npm run build` once to regenerate them, then
+re-run tsc.
 
-* **Eliminate Manual Verification:** Automate task link validation (HTTP 200 checks, GitHub public repo checks) before storing entries in the database.
+## Conventions
 
-* **Prevent Administrative Bottlenecks:** Auto-compile a static HTML contributors directory page whenever an intern completes a task.
+- **Imports:** `@/` alias (maps to repo root). Server-only secrets via
+  `process.env.*` inside API routes; public config via `NEXT_PUBLIC_*`.
+- **Auth on API routes:** always through `lib/api-auth.ts`
+  (`authUser`/`authUserId` + `serviceClient()`). Cookie session is tried
+  first (web), then `Authorization: Bearer` (mobile). Never read a raw
+  `userId` from the body as identity — every route compares the resolved
+  user id against the body value (`userId mismatch` → 403).
+- **Service role:** all privileged DB access via `serviceClient()` from
+  `lib/api-auth.ts` (legacy `supabaseService()` in `supabase-server.ts`
+  still works). Anon-key clients never write outside RLS policies.
+- **Checkout flow order** (`app/api/checkout/route.ts`): auth → field
+  presence → https + SSRF checks → GitHub parse → product/stage match →
+  purchasable gate (423) → prereq + duplicate guards → live HTTP-200 check
+  (2 s) → GitHub API check → insert submission → insert order (retry on
+  order-number collision) → notification + email + contributors webhook.
+  Keep this order when editing; each guard's status code is contractual.
+- **Stage gating:** `STAGE_OPEN` in `lib/store.ts` is the single source for
+  "purchasable". Server enforces it (423 + `STAGE2_CLOSED_MSG`); web mirrors
+  it for button state. To open a stage, flip the map + redeploy.
+- **Cart:** source of truth = `public.carts` row (see section below). Never
+  reintroduce ephemeral-only cart state.
+- **Formatting:** Prettier defaults (double quotes, semicolons). Unused
+  imports/variables fail `tsc --noEmit` — fix them, don't suppress.
+- **Migrations:** new `supabase/migrations/00N_*.sql` files must be
+  idempotent (`if not exists`) and listed in `README.md` run order.
 
-* **Identity Verification:** Authenticate interns strictly via Google OAuth mapped to pre-populated master emails and unique Zedu IDs.
+## Cart sync architecture (Phase 0)
 
-* **Extensibility:** Support modular addition of future program milestones (Task 2, Task 3, etc.) without architectural changes.
+```
+web (useCart) <--> public.carts row <--> mobile app (same table)
+                       |  Realtime postgres_changes
+                /api/checkout (validates; client clears cart after success)
+```
 
-## 2. System Architecture & Data Flow
+- Table: `user_id` PK → `users.id` cascade; `product_id` → `products.id`
+  cascade; `todo_url`, `repo_url`, `updated_at`. RLS: owner-only
+  select/insert/update/delete (client-writable **by design** — unique
+  among tables).
+- Realtime publication `supabase_realtime` includes `carts`; clients
+  subscribe channel `cart:<uid>` filtered `user_id=eq.<uid>`.
+- Protocol: upsert on change (URL typing debounced 600 ms), last-write-wins
+  on `updated_at`; DELETE row on checkout/Remove → remote side clears.
+  Failed writes/deletes mark a dirty flag and are retried on the browser
+  `online` event (push local changes first, else pull the row); a
+  visibility-change re-read covers sleep gaps.
+- Offline UX: checkout with no connection shows "You're offline. Check your
+  internet connection and try again." (never raw `Failed to fetch`).
+- Drawer UX: close = minimize (row persists); floating chip reopens;
+  "Remove from cart" deletes the row everywhere.
+- Mobile contract: replicate this exact protocol against the same table —
+  full spec in [`MOBILE_HANDOVER.md`](./MOBILE_HANDOVER.md).
+
+## Notes
+
+- Google OAuth only; onboarding claims a pre-imported `roster` row
+  (verify → claim → insert `users`). Roster is service-role only — no
+  client RLS policies on purpose.
+- `notifications` is the in-account inbox (Mailgun is best-effort).
+- Contributors page is built externally (Action → staging frontend repo);
+  `public/contributors/` output is gitignored.
+- `import.log`, `tsconfig.tsbuildinfo`, `.next/` are local artifacts —
+  never commit.
+
+## Legacy architecture diagram (from v1.0 PRD — unchanged data flow)
 
 ```
 +-----------------------------------------------------------------------+

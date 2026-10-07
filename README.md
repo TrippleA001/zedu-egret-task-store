@@ -46,6 +46,7 @@ onboard again. The roster claim is **not** covered by any cascade.
 Run in order in the Supabase SQL Editor:
 1. `supabase/migrations/001_init.sql` — roster, users, products, orders, submissions + RLS
 2. `supabase/migrations/002_notifications.sql` — in-account notifications (order receipts)
+3. `supabase/migrations/003_cart.sql` — persisted cross-device cart + Realtime sync
 
 ## Opening Stage 2 later
 
@@ -79,7 +80,10 @@ npm run dev                  # http://localhost:3000
 
 - `/login` → Google OAuth → `/auth/callback` → `/` or `/onboarding`
 - `/onboarding` — Step 1: roster email dropdown + Zedu ID verify; Step 2: profile + 4 channel checkboxes; Step 3: skill 1–5 (sub-team greyed out, auto-assigned later)
-- `/` — storefront: Stage 1 active ($0.00), Stage 2+ locked until prereq
+- `/` — storefront: Stage 1 active ($0.00), Stage 2+ locked until prereq.
+  Cart is persisted in `public.carts` and synced web↔mobile over Realtime —
+  closing the drawer minimizes (floating chip reopens); checkout or
+  "Remove from cart" clears it on all devices.
 - `POST /api/checkout` — HTTPS + SSRF guard, HTTP-200 app check, GitHub `!private && size>0`, duplicate guard, `ZE-2026-XXXX` order, Mailgun + webhook fire-and-forget
 
 ## Scripts

@@ -2,10 +2,10 @@ import { Alert, Field, btnPrimary, btnSecondary, inputCls } from "./ui";
 
 export type CartProduct = { id: string; title: string; stage_number: number };
 
-export default function CartDrawer({ cart, todoUrl, repoUrl, msg, busy, onTodo, onRepo, onClose, onCheckout }: {
+export default function CartDrawer({ cart, todoUrl, repoUrl, msg, busy, onTodo, onRepo, onClose, onRemove, onCheckout }: {
   cart: CartProduct; todoUrl: string; repoUrl: string; msg: string; busy: boolean;
   onTodo: (v: string) => void; onRepo: (v: string) => void;
-  onClose: () => void; onCheckout: () => void;
+  onClose: () => void; onRemove: () => void; onCheckout: () => void;
 }) {
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Checkout ${cart.title}`}>
@@ -43,6 +43,15 @@ export default function CartDrawer({ cart, todoUrl, repoUrl, msg, busy, onTodo, 
           <button className={btnSecondary} onClick={onClose} disabled={busy}>Continue shopping</button>
           <button className={`${btnPrimary} flex-1`} disabled={busy || !todoUrl || !repoUrl} onClick={onCheckout}>
             {busy ? "Verifying..." : "Place order ($0.00)"}
+          </button>
+        </div>
+        <div className="border-t border-line px-5 py-3">
+          <button
+            onClick={onRemove}
+            disabled={busy}
+            className="w-full text-center text-[13px] font-semibold text-muted underline-offset-2 hover:text-ink hover:underline disabled:opacity-50"
+          >
+            Remove from cart
           </button>
         </div>
       </aside>

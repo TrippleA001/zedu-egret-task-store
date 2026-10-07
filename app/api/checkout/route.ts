@@ -1,20 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
 import { isBlockedHost, isHttpsUrl, parseGithubRepo, generateOrderNumber } from "@/lib/validation";
 import { fetchWithTimeout, sendReceiptEmail, triggerContributorsBuild } from "@/lib/side-effects";
 import { STAGE2_CLOSED_MSG, isStagePurchasable } from "@/lib/store";
+import { authUser, serviceClient } from "@/lib/api-auth";
 
 export async function POST(request: Request) {
   try {
-    const jar = cookies();
-    const authed = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { getAll: () => jar.getAll(), setAll: () => {} } }
-    );
-    const { data: { user } } = await authed.auth.getUser();
+    const user = await authUser(request);
     if (!user) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
     const body = await request.json();
@@ -38,7 +30,7 @@ export async function POST(request: Request) {
     const gh = parseGithubRepo(taskRepoUrl);
     if (!gh) return NextResponse.json({ error: "taskRepoUrl must be github.com/owner/repo" }, { status: 400 });
 
-    const svc = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)!);
+    const svc = serviceClient();
     const { data: product } = await svc.from("products").select("*").eq("id", productId).maybeSingle();
     if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
     if (Number(product.stage_number) !== stageNumber)

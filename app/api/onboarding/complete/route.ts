@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { createServerClient } from "@supabase/ssr";
-import { cookies } from "next/headers";
+import { authUser } from "@/lib/api-auth";
 import {
   normalizeEmail,
   normalizeTelegram,
@@ -13,14 +12,8 @@ import {
 // POST /api/onboarding/complete — atomically claim roster row + insert users row.
 export async function POST(request: Request) {
   try {
-    // 1. Must be logged in via Google
-    const jar = cookies();
-    const authed = createServerClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-      { cookies: { getAll: () => jar.getAll(), setAll: () => {} } }
-    );
-    const { data: { user } } = await authed.auth.getUser();
+    // 1. Must be logged in via Google (web cookies or mobile Bearer token)
+    const user = await authUser(request);
     if (!user?.id || !user?.email)
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 

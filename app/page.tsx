@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
 import { isStagePurchasable, STAGE2_CLOSED_MSG } from "@/lib/store";
+import { useCart } from "@/lib/use-cart";
 import { Alert, Badge, btnSecondary, inputCls } from "./components/ui";
 import CartDrawer from "./components/cart-drawer";
 import SuccessPanel from "./components/success-panel";
@@ -15,9 +16,20 @@ export default function StorePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [stages, setStages] = useState<number[]>([]);
   const [userId, setUserId] = useState("");
-  const [cart, setCart] = useState<Product | null>(null);
-  const [todoUrl, setTodoUrl] = useState("");
-  const [repoUrl, setRepoUrl] = useState("");
+  // Persisted cross-device cart (Supabase + Realtime). Closing the drawer
+  // minimizes — it does NOT discard — so the cart survives refresh and syncs
+  // to the mobile app. Checkout or "Remove" clears it everywhere.
+  const {
+    cart,
+    todoUrl,
+    repoUrl,
+    loaded: cartLoaded,
+    openCart,
+    removeCart,
+    setTodoUrl,
+    setRepoUrl,
+  } = useCart();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState("");
@@ -44,7 +56,11 @@ export default function StorePage() {
   const checkout = async () => {
     if (!cart) return;
     setBusy(true); setMsg("");
+    const OFFLINE_MSG = "You're offline. Check your internet connection and try again.";
     try {
+      if (typeof navigator !== "undefined" && !navigator.onLine) {
+        throw new Error(OFFLINE_MSG);
+      }
       const r = await fetch("/api/checkout", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -52,14 +68,24 @@ export default function StorePage() {
           todoAppUrl: todoUrl, taskRepoUrl: repoUrl,
         }),
       });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.error || "Checkout failed");
+      let j: any = {};
+      try { j = await r.json(); } catch { /* non-JSON response — status only */ }
+      if (!r.ok) throw new Error(j.error || `Checkout failed (${r.status})`);
       setReceipt(j.order_number);
       setReceiptEmail(j.email || "skipped");
       setStages((s) => [...s, cart.stage_number]);
-      setCart(null); setTodoUrl(""); setRepoUrl("");
-    } catch (e: any) { setMsg(e.message); }
+      setDrawerOpen(false);
+      await removeCart(); // clears everywhere (Realtime clears the other device)
+    } catch (e: any) {
+      const netFail = e instanceof TypeError && /fetch|network/i.test(String(e.message));
+      setMsg(netFail || !navigator.onLine ? OFFLINE_MSG : e.message);
+    }
     finally { setBusy(false); }
+  };
+
+  const addToCart = async (p: Product) => {
+    await openCart(p);
+    setDrawerOpen(true);
   };
 
   const doneCount = stages.length;
@@ -135,7 +161,7 @@ export default function StorePage() {
                     {done ? (
                       <span className="inline-flex w-full items-center justify-center rounded-lg bg-canvas px-4 py-2.5 text-sm font-semibold text-muted">Completed</span>
                     ) : open && purchasable ? (
-                      <button className="inline-flex w-full items-center justify-center rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-black" onClick={() => setCart(p)}>Add to cart</button>
+                      <button className="inline-flex w-full items-center justify-center rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-black" onClick={() => void addToCart(p)}>Add to cart</button>
                     ) : open ? (
                       <div>
                         <span className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-muted" title={STAGE2_CLOSED_MSG}>
@@ -155,7 +181,7 @@ export default function StorePage() {
           })}
         </div>
       )}
-      {cart && (
+      {cart && drawerOpen && (
         <CartDrawer
           cart={cart}
           todoUrl={todoUrl}
@@ -164,9 +190,20 @@ export default function StorePage() {
           busy={busy}
           onTodo={setTodoUrl}
           onRepo={setRepoUrl}
-          onClose={() => !busy && setCart(null)}
+          onClose={() => !busy && setDrawerOpen(false)}
+          onRemove={() => void removeCart()}
           onCheckout={checkout}
         />
+      )}
+      {cart && !drawerOpen && cartLoaded && (
+        <button
+          onClick={() => setDrawerOpen(true)}
+          className="fixed bottom-6 right-6 z-40 inline-flex items-center gap-2 rounded-full bg-ink px-5 py-3 text-sm font-semibold text-white shadow-lg transition hover:bg-black"
+          aria-label={`Reopen cart: ${cart.title}`}
+        >
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] font-bold text-ink">1</span>
+          {cart.title}
+        </button>
       )}
     </div>
   );

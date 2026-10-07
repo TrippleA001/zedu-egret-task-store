@@ -1,29 +1,13 @@
 import { NextResponse } from "next/server";
-import { createServerClient } from "@supabase/ssr";
-import { createClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
+import { authUserId, serviceClient } from "@/lib/api-auth";
 
 function svc() {
-  return createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)!
-  );
-}
-
-async function authedUserId() {
-  const jar = cookies();
-  const authed = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => jar.getAll(), setAll: () => {} } }
-  );
-  const { data: { user } } = await authed.auth.getUser();
-  return user?.id ?? null;
+  return serviceClient();
 }
 
 // GET /api/notifications — inbox for the logged-in user.
-export async function GET() {
-  const uid = await authedUserId();
+export async function GET(request: Request) {
+  const uid = await authUserId(request);
   if (!uid) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const { data, error } = await svc()
     .from("notifications")
@@ -38,7 +22,7 @@ export async function GET() {
 
 // PATCH /api/notifications { ids?: string[] } — mark read (all if omitted).
 export async function PATCH(request: Request) {
-  const uid = await authedUserId();
+  const uid = await authUserId(request);
   if (!uid) return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   const body = await request.json().catch(() => ({}));
   const ids: string[] | undefined = Array.isArray(body?.ids) ? body.ids : undefined;
