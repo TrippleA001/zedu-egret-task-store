@@ -8,7 +8,9 @@ export async function GET(request: Request) {
     const svc = serviceClient();
     const { data: orders } = await svc.from("orders").select("*, products(title, stage_number)").eq("user_id", userId).order("created_at", { ascending: false });
     const { data: subs } = await svc.from("submissions").select("stage_number").eq("user_id", userId);
-    return NextResponse.json({ orders: orders || [], stages: (subs || []).map((s: any) => s.stage_number) });
+    return NextResponse.json({ orders: orders || [], stages: (subs || []).map((s: any) => s.stage_number) }, {
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "failed" }, { status: 500 });
   }

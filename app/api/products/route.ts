@@ -18,7 +18,11 @@ export async function GET() {
       .eq("is_active", true)
       .order("stage_number");
     if (error) throw error;
-    return NextResponse.json({ items: data || [] });
+    // no-store: without an explicit header the browser/CDN may heuristically
+    // cache this GET, serving a stale catalog after admin edits
+    return NextResponse.json({ items: data || [] }, {
+      headers: { "Cache-Control": "no-store" },
+    });
   } catch (e: any) {
     return NextResponse.json({ error: e?.message || "failed" }, { status: 500 });
   }
