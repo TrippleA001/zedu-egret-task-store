@@ -48,6 +48,7 @@ Run in order in the Supabase SQL Editor:
 2. `supabase/migrations/002_notifications.sql` — in-account notifications (order receipts)
 3. `supabase/migrations/003_cart.sql` — persisted cross-device cart + Realtime sync
 4. `supabase/migrations/004_weeks_tasks.sql` — week_number + per-task submission_schema + values JSONB (backfills existing submissions)
+5. `supabase/migrations/005_change_requests.sql` — profile change-request queue + owner-only RLS read
 
 ## Opening Stage 2 later
 

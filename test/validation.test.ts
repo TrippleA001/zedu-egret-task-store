@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseGithubRepo, parseGithubPr, parseDriveUrl, isBlockedHost, isHttpsUrl, generateOrderNumber, normalizeEmail, normalizeTelegram, telegramError } from "../lib/validation";
+import { parseGithubRepo, parseGithubPr, parseDriveUrl, isBlockedHost, isHttpsUrl, generateOrderNumber, normalizeEmail, normalizeTelegram, telegramError, CHANGEABLE_FIELDS, isChangeableField, changeValueError } from "../lib/validation";
 
 test("parseGithubRepo accepts full URL and short form", () => {
   assert.deepEqual(parseGithubRepo("https://github.com/octocat/hello-world"), { owner: "octocat", repo: "hello-world" });
@@ -49,4 +49,26 @@ test("telegram: display names accepted (spaces allowed)", () => {
   assert.equal(normalizeTelegram("  A   Data   Scientist  "), "A Data Scientist");
   assert.ok((telegramError("") || "").includes("display name"));
   assert.ok((telegramError("A") || "").includes("too short"));
+});
+
+test("changeable fields allowlist excludes identity fields", () => {
+  assert.ok(isChangeableField("full_name"));
+  assert.ok(isChangeableField("skill_rating"));
+  assert.equal(isChangeableField("zedu_id"), false);
+  assert.equal(isChangeableField("workspace_email"), false);
+  assert.equal(isChangeableField("sub_team"), false);
+  assert.equal(isChangeableField("id"), false);
+  assert.equal(CHANGEABLE_FIELDS.length, 4);
+});
+
+test("changeValueError per field", () => {
+  assert.equal(changeValueError("full_name", "Abdul Samad"), null);
+  assert.equal(changeValueError("full_name", "A"), "Full name looks too short");
+  assert.equal(changeValueError("github_url", "https://github.com/octocat"), null);
+  assert.equal(changeValueError("github_url", "https://gitlab.com/octocat"), "GitHub URL must be https://github.com/username");
+  assert.equal(changeValueError("telegram_handle", "A Data Scientist"), null);
+  assert.ok((changeValueError("telegram_handle", "A") || "").includes("too short"));
+  assert.equal(changeValueError("skill_rating", "4"), null);
+  assert.equal(changeValueError("skill_rating", "9"), "Skill rating must be 1-5");
+  assert.equal(changeValueError("skill_rating", ""), "New value is required");
 });

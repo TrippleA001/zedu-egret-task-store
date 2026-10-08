@@ -84,6 +84,47 @@ export function sanitizeText(s: string, max = 255) {
   return s.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, max);
 }
 
+// Profile fields a user may request changes to. Identity fields (emails,
+// zedu_id) and sub_team (auto-assigned) are deliberately excluded.
+export const CHANGEABLE_FIELDS = [
+  "full_name",
+  "github_url",
+  "telegram_handle",
+  "skill_rating",
+] as const;
+export type ChangeableField = (typeof CHANGEABLE_FIELDS)[number];
+
+export function isChangeableField(f: string): f is ChangeableField {
+  return (CHANGEABLE_FIELDS as readonly string[]).includes(f);
+}
+
+/** Validate a proposed new value for a changeable profile field.
+ *  Returns an error string or null (valid). */
+export function changeValueError(field: ChangeableField, raw: string): string | null {
+  const v = raw.trim();
+  if (!v) return "New value is required";
+  switch (field) {
+    case "full_name": {
+      const s = sanitizeText(v);
+      if (s.length < 2) return "Full name looks too short";
+      return null;
+    }
+    case "github_url": {
+      try {
+        const u = new URL(v);
+        if (u.protocol !== "https:" || u.hostname !== "github.com") throw new Error();
+      } catch {
+        return "GitHub URL must be https://github.com/username";
+      }
+      return null;
+    }
+    case "telegram_handle":
+      return telegramError(v);
+    case "skill_rating":
+      return ["1", "2", "3", "4", "5"].includes(v) ? null : "Skill rating must be 1-5";
+  }
+}
+
 export function generateOrderNumber() {
   const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
   let suffix = "";
