@@ -52,21 +52,34 @@ A native mobile client with full feature parity against the web storefront:
 
 ## 4. API route contracts (all relative to the web API base URL)
 
+> Phase 1 change: checkout is now schema-driven. It accepts the new
+> `{ userId, productId, taskNumber, values }` body; the legacy
+> `{ stageNumber, todoAppUrl, taskRepoUrl }` body still works (mapped to
+> Task 1's schema). Available tasks are grouped by week on the storefront;
+> `submission_schema` on each product defines its required fields
+> (`live_url` | `github_repo` | `drive_url` | `github_pr` | `text`).
+> PR links must reference a MERGED PR — open or closed-unmerged is rejected
+> (422). See `supabase/migrations/004_weeks_tasks.sql` for current tasks.
+
 ### `GET /api/products` — no auth
-`{ items: [{ id, title, description, price, stage_number, is_active }] }`
-(sorted by stage). Stage 1 = `$0.00` active; Stage 2+ lock semantics below.
+`{ items: [{ id, title, description, price, stage_number, week_number, submission_schema }] }`
+(sorted by week, then stage). Stage 1 = `$0.00` active; Stage 2+ lock semantics below.
 
 ### `GET /api/orders` — Bearer auth
 `{ orders: [...], stages: number[] }` — `stages` = completed stage numbers,
 drives locks + progress.
 
 ### `POST /api/checkout` — Bearer auth
-Body: `{ userId, productId, stageNumber, todoAppUrl, taskRepoUrl }`.
+Body: `{ userId, productId, taskNumber, values }` where `values` maps each
+required `submission_schema` key to the user's URL/text (e.g. Task 3:
+`{ video_drive, apk_drive, mobile_repo, merged_pr }`). Legacy body
+`{ userId, productId, stageNumber, todoAppUrl, taskRepoUrl }` still works.
 `userId` must equal the token's user (403 otherwise). Server validates in
-order: fields (400) → https + SSRF (400) → GitHub parse (400) →
-product/stage match (400/404) → purchasable gate (**423**) → prereq (**423**)
-→ duplicate (**409**) → todo HTTP-200 (**422**) → repo public + non-empty
-(**422**). Success: `{ ok: true, orderId, order_number: "ZE-2026-XXXX", email }`.
+order: fields (400) → per-field schema checks (400 required missing; 422
+invalid: https + SSRF for `live_url`, public + non-empty for `github_repo`,
+Drive host for `drive_url`, MERGED status for `github_pr`) →
+product/task match (400/404) → purchasable gate (**423**) → prereq (**423**)
+→ duplicate (**409**). Success: `{ ok: true, orderId, order_number: "ZE-2026-XXXX", email }`.
 
 ### `GET /api/notifications` / `PATCH /api/notifications` — Bearer auth
 GET → `{ items: [{ id, kind, title, body, order_number, read_at, created_at }], unread }` (latest 50).
@@ -134,12 +147,15 @@ Rules (mirror web `lib/use-cart.ts`):
 Pure TypeScript, no Next.js imports — copy these files into the mobile repo
 (keep in sync manually if they change):
 
-- `lib/store.ts` → `STAGE_OPEN`, `isStagePurchasable()`,
-  `STAGE2_CLOSED_MSG`. **Same map must gate the same stages** or mobile
+- `lib/store.ts` → `TASK_OPEN` (plus `STAGE_OPEN` alias), `isTaskPurchasable()`,
+  `TASK_CLOSED_MSG`. **Same map must gate the same task numbers** or mobile
   will offer checkout the server rejects (423).
 - `lib/validation.ts` → `isHttpsUrl`, `isBlockedHost`,
-  `parseGithubRepo`, normalizers. Reuse for client-side pre-checks so the
-  user gets instant feedback; server re-validates anyway.
+  `parseGithubRepo`, `parseGithubPr`, `parseDriveUrl`, normalizers. Reuse for
+  client-side pre-checks so the user gets instant feedback; server re-validates
+  anyway. Render checkout inputs from each product's `submission_schema`
+  (`live_url` | `github_repo` | `drive_url` | `github_pr` | `text`) — Task 3
+  needs 4 inputs, not 2.
 
 ## 7. Screen-by-screen notes
 
@@ -147,14 +163,15 @@ Pure TypeScript, no Next.js imports — copy these files into the mobile repo
    email dropdown (`roster/emails`) + Zedu ID → `verify`. Step 2: profile
    fields + 4 channel checkboxes. Step 3: skill 1–5 (sub-team greyed out).
    Finish → `complete`. Respect each error message verbatim.
-2. **Storefront**: grid of products; per-stage state machine from web
-   `app/page.tsx`: done (in `stages`) → "Completed"; unlocked + purchasable
-   → "Add to cart"; unlocked but closed → greyed + `STAGE2_CLOSED_MSG`;
-   locked → "Complete Stage N-1 first". `unlocked = stage===1 ||
-   stages.includes(stage-1)`.
-3. **Cart/checkout**: bottom-sheet ≈ web `CartDrawer`; two URL inputs;
-   "Place order ($0.00)" disabled until both filled; POST checkout; success
-   screen shows `order_number` + email status (mirror `SuccessPanel`).
+2. **Storefront**: week sections with task cards; per-task state machine
+   from web `app/page.tsx`: done (in `stages`) → "Completed"; unlocked +
+   purchasable → "Add to cart"; unlocked but closed → greyed +
+   `TASK_CLOSED_MSG`; locked → "Complete Task N-1 first".
+   `unlocked = task===1 || stages.includes(task-1)`.
+3. **Cart/checkout**: bottom-sheet ≈ web `CartDrawer`; inputs rendered from
+   the product's `submission_schema`; "Place order ($0.00)" disabled until
+   all required fields are filled; POST checkout with `{ taskNumber, values }`;
+   success screen shows `order_number` + email status (mirror `SuccessPanel`).
 4. **Notifications**: badge = `unread`; tap-all-read calls PATCH.
 5. **Contributors**: render the published static page in a WebView or fetch
    its data — ask the lead which output (HTML vs data file) is current.

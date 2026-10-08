@@ -56,6 +56,30 @@ export function parseGithubRepo(input: string): { owner: string; repo: string } 
   return null;
 }
 
+/** Parse a GitHub PR reference. Accepts full URL (…/owner/repo/pull/N) or
+ *  short form (owner/repo#N). Anything else (including issue links) → null. */
+export function parseGithubPr(input: string): { owner: string; repo: string; number: number } | null {
+  const t = input.trim().replace(/\/+$/, "").replace(/\/(files|commits|checks)$/i, "");
+  let m = t.match(/^https?:\/\/(www\.)?github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)$/i);
+  if (m) return { owner: m[2], repo: m[3], number: Number(m[4]) };
+  m = t.match(/^([^/\s]+)\/([^/\s]+)#(\d+)$/);
+  if (m && !m[1].includes(":") && !m[1].includes(".")) return { owner: m[1], repo: m[2], number: Number(m[3]) };
+  return null;
+}
+
+/** Accept a shared Google Drive file/folder link. Returns the canonical
+ *  drive host or null when the input is not a Drive link at all. */
+export function parseDriveUrl(input: string): string | null {
+  let host = "";
+  try {
+    host = new URL(input.trim()).hostname.toLowerCase();
+  } catch {
+    return null;
+  }
+  if (host === "drive.google.com" || host === "docs.google.com") return host;
+  return null;
+}
+
 export function sanitizeText(s: string, max = 255) {
   return s.replace(/[\u0000-\u001F\u007F]/g, "").trim().slice(0, max);
 }

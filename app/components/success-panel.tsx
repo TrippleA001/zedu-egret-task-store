@@ -20,7 +20,7 @@ export default function SuccessPanel({ orderNumber, stage, email }: {
   return (
     <div className="mt-6 overflow-hidden rounded-xl border border-brand/30 bg-white shadow-sm">
       <div className="bg-brand-deep px-5 py-4 sm:px-6">
-        <p className="text-xs font-semibold uppercase tracking-widest text-white/80">Stage {stage} complete</p>
+        <p className="text-xs font-semibold uppercase tracking-widest text-white/80">Task {stage} complete</p>
         <h2 className="mt-0.5 text-xl font-extrabold tracking-tight text-white sm:text-2xl">
           Task {stage} complete — well done!
         </h2>
