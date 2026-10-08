@@ -53,6 +53,7 @@ Run in order in the Supabase SQL Editor:
    `update public.users set role='admin' where workspace_email='…';`
 7. `supabase/migrations/007_task1_schema.sql` — moves Task 1's checkout form (deployed URL + GitHub repo) from a hardcoded fallback into its product row (admin-editable in `/admin`)
 8. `supabase/migrations/008_task_open.sql` — `products.is_open` replaces the code-bound `TASK_OPEN` gate; backfills tasks 1–5 open, new tasks closed by default. Toggle per task from `/admin` (or set `is_open` directly)
+9. `supabase/migrations/009_products_realtime.sql` — live catalog updates: adds `products` to the `supabase_realtime` publication so open storefronts refetch the moment a task is edited from `/admin` (focus/visibility refetch covers clients opened before this migration runs)
 
 ## Opening a task later
 

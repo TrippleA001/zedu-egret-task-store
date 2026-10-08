@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
@@ -50,6 +50,28 @@ export default function StorePage() {
   const [receiptStage, setReceiptStage] = useState(1);
   const [receiptEmail, setReceiptEmail] = useState("");
 
+  // Catalog stays live: the /api/products route is never cached, and this page
+  // refetches on tab focus, window visibility, and Supabase Realtime events on
+  // public.products — so an admin's title/schema/is_open edit lands here without
+  // a reload. Debounced so a burst of edits triggers one fetch, not many.
+  const loadProducts = useCallback(async () => {
+    try {
+      const rp = await fetch("/api/products").then((r) => r.json());
+      if (rp.items) setProducts(rp.items);
+    } catch {
+      // transient (offline, dev restart) — keep showing the previous catalog
+    }
+  }, []);
+
+  const reloadTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const scheduleProductReload = useCallback(() => {
+    if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    reloadTimer.current = setTimeout(() => {
+      reloadTimer.current = null;
+      void loadProducts();
+    }, 250);
+  }, [loadProducts]);
+
   useEffect(() => {
     (async () => {
       const sb = supabaseBrowser();
@@ -58,12 +80,35 @@ export default function StorePage() {
       setUserId(data.user.id);
       const { data: prof } = await sb.from("users").select("id").eq("id", data.user.id).maybeSingle();
       if (!prof) { router.replace("/onboarding"); return; }
-      const rp = await fetch("/api/products").then((r) => r.json());
-      if (rp.items) setProducts(rp.items);
+      await loadProducts();
       const ro = await fetch("/api/orders").then((r) => r.json());
       if (ro.stages) setStages(ro.stages);
     })();
-  }, [router]);
+  }, [loadProducts, router]);
+
+  useEffect(() => {
+    if (!userId) return;
+    const onFocus = () => void loadProducts();
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") void loadProducts();
+    };
+    window.addEventListener("focus", onFocus);
+    document.addEventListener("visibilitychange", onVisibility);
+    const channel = supabaseBrowser()
+      .channel("products")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "products" },
+        scheduleProductReload
+      )
+      .subscribe();
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVisibility);
+      supabaseBrowser().removeChannel(channel);
+      if (reloadTimer.current) clearTimeout(reloadTimer.current);
+    };
+  }, [userId, loadProducts, scheduleProductReload]);
 
   const unlocked = (stage: number) =>
     stage === 1 || stages.includes(stage - 1);
