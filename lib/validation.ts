@@ -98,6 +98,51 @@ export function isChangeableField(f: string): f is ChangeableField {
   return (CHANGEABLE_FIELDS as readonly string[]).includes(f);
 }
 
+// Column on public.users each changeable field maps to. Shared by the
+// change-request POST (snapshot) and the admin approve route (apply).
+export const CHANGE_FIELD_COLUMN: Record<ChangeableField, string> = {
+  full_name: "full_name",
+  github_url: "github_url",
+  telegram_handle: "telegram_handle",
+  skill_rating: "skill_rating",
+};
+
+// Allowed per-task submission field types (mirrors the checkout validator).
+export const SUBMISSION_FIELD_TYPES = [
+  "live_url",
+  "github_repo",
+  "drive_url",
+  "github_pr",
+  "text",
+] as const;
+export type SubmissionFieldType = (typeof SUBMISSION_FIELD_TYPES)[number];
+
+/** Validate an admin-supplied submission_schema (JSON array of field defs).
+ *  Returns an error string or null (valid). */
+export function submissionSchemaError(schema: unknown): string | null {
+  if (!Array.isArray(schema)) return "submission_schema must be a JSON array";
+  if (schema.length > 20) return "submission_schema supports up to 20 fields";
+  const seen = new Set<string>();
+  for (const f of schema) {
+    const def = (f ?? {}) as Record<string, unknown>;
+    const key = typeof def.key === "string" ? def.key.trim() : "";
+    if (!/^[a-z0-9_]{1,40}$/.test(key))
+      return "Each field needs a snake_case key (letters, numbers, underscores)";
+    if (seen.has(key)) return `Duplicate field key "${key}"`;
+    seen.add(key);
+    const label = typeof def.label === "string" ? def.label.trim() : "";
+    if (!label || label.length > 120)
+      return `Field "${key}" needs a label (max 120 characters)`;
+    if (!(SUBMISSION_FIELD_TYPES as readonly string[]).includes(String(def.type)))
+      return `Field "${key}" has unknown type "${String(def.type)}" (use one of: ${SUBMISSION_FIELD_TYPES.join(", ")})`;
+    if (def.hint != null && (typeof def.hint !== "string" || def.hint.trim().length > 200))
+      return `Field "${key}" hint must be a string of at most 200 characters`;
+    if (def.required != null && typeof def.required !== "boolean")
+      return `Field "${key}" required must be true or false`;
+  }
+  return null;
+}
+
 /** Validate a proposed new value for a changeable profile field.
  *  Returns an error string or null (valid). */
 export function changeValueError(field: ChangeableField, raw: string): string | null {

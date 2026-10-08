@@ -49,6 +49,8 @@ Run in order in the Supabase SQL Editor:
 3. `supabase/migrations/003_cart.sql` — persisted cross-device cart + Realtime sync
 4. `supabase/migrations/004_weeks_tasks.sql` — week_number + per-task submission_schema + values JSONB (backfills existing submissions)
 5. `supabase/migrations/005_change_requests.sql` — profile change-request queue + owner-only RLS read
+6. `supabase/migrations/006_admin_roles.sql` — `users.role` (member/admin) + queue index; drops the client-side users UPDATE policy (all profile writes are service-role). Promote an admin with:
+   `update public.users set role='admin' where workspace_email='…';`
 
 ## Opening Stage 2 later
 

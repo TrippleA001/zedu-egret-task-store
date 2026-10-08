@@ -74,3 +74,12 @@ export async function authUser(request?: Request): Promise<{
   if (!viaToken?.user?.id) return null;
   return { id: viaToken.user.id, email: viaToken.user.email ?? undefined };
 }
+
+// True when the users row carries role='admin' (set manually via SQL,
+// see supabase/migrations/006_admin_roles.sql). Pair with authUser: a null
+// authUser means 401, a false isAdminUser means 403.
+export async function isAdminUser(userId: string): Promise<boolean> {
+  const svc = serviceClient();
+  const { data } = await svc.from("users").select("role").eq("id", userId).maybeSingle();
+  return data?.role === "admin";
+}
