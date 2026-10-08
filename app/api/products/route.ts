@@ -1,6 +1,11 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
+// Never cache: the product list must reflect the DB immediately (new tasks,
+// schema/label edits) — Next's fetch cache otherwise serves stale data
+// across restarts.
+export const dynamic = "force-dynamic";
+
 export async function GET() {
   try {
     const sb = createClient(

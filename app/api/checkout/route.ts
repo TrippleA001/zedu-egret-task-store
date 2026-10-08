@@ -1,8 +1,93 @@
 import { NextResponse } from "next/server";
-import { isBlockedHost, isHttpsUrl, parseGithubRepo, generateOrderNumber } from "@/lib/validation";
+import { isBlockedHost, isHttpsUrl, parseDriveUrl, parseGithubPr, parseGithubRepo, generateOrderNumber } from "@/lib/validation";
 import { fetchWithTimeout, sendReceiptEmail, triggerContributorsBuild } from "@/lib/side-effects";
-import { STAGE2_CLOSED_MSG, isStagePurchasable } from "@/lib/store";
+import { TASK_CLOSED_MSG, isTaskPurchasable } from "@/lib/store";
 import { authUser, serviceClient } from "@/lib/api-auth";
+
+export type SchemaField = {
+  key: string;
+  label: string;
+  hint?: string;
+  type: "live_url" | "github_repo" | "drive_url" | "github_pr" | "text";
+  required?: boolean;
+};
+
+function githubHeaders(): Record<string, string> {
+  const pat = process.env.GITHUB_PAT || "";
+  return {
+    Accept: "application/vnd.github+json",
+    ...(pat && !pat.includes("placeholder") ? { Authorization: `Bearer ${pat}` } : {}),
+    "User-Agent": "zedu-egret-checkout/1.0",
+  };
+}
+
+/** Validate one schema field value. Returns an error string or null (valid). */
+async function validateSubmissionField(field: SchemaField, raw: string): Promise<string | null> {
+  const label = field.label || field.key;
+  switch (field.type) {
+    case "live_url": {
+      if (!isHttpsUrl(raw)) return `${label} must be an https:// URL`;
+      let host = "";
+      try {
+        host = new URL(raw).hostname;
+      } catch {
+        return `${label} is not a valid URL`;
+      }
+      if (isBlockedHost(host)) return `${label} host is not allowed`;
+      let ok = false;
+      try {
+        ok = (await fetchWithTimeout(raw, 2000)).status === 200;
+      } catch {
+        ok = false;
+      }
+      if (!ok) return `${label} is not reachable (need HTTP 200)`;
+      return null;
+    }
+    case "github_repo": {
+      const gh = parseGithubRepo(raw);
+      if (!gh) return `${label} must be github.com/owner/repo`;
+      const res = await fetch(`https://api.github.com/repos/${gh.owner}/${gh.repo}`, {
+        headers: githubHeaders(),
+        signal: AbortSignal.timeout(2000),
+      }).catch(() => null);
+      if (!res || res.status === 404) return `${label}: repo not found or private`;
+      if (!res.ok) return `${label}: GitHub check failed (${res.status})`;
+      const repo = await res.json();
+      if (repo.private || repo.size === 0) return `${label}: repo must be public + non-empty`;
+      return null;
+    }
+    case "drive_url": {
+      if (!isHttpsUrl(raw) || !parseDriveUrl(raw))
+        return `${label} must be a Google Drive link (drive.google.com or docs.google.com)`;
+      let ok = false;
+      try {
+        ok = (await fetchWithTimeout(raw, 2000)).status < 400;
+      } catch {
+        ok = false;
+      }
+      if (!ok) return `${label} is not reachable`;
+      return null;
+    }
+    case "github_pr": {
+      const pr = parseGithubPr(raw);
+      if (!pr) return `${label} must be a GitHub pull request link (…/owner/repo/pull/N)`;
+      const res = await fetch(`https://api.github.com/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`, {
+        headers: githubHeaders(),
+        signal: AbortSignal.timeout(2000),
+      }).catch(() => null);
+      if (!res || res.status === 404) return `${label}: pull request not found`;
+      if (!res.ok) return `${label}: GitHub check failed (${res.status})`;
+      const data = await res.json();
+      // Accept ONLY merged PRs: open, closed-unmerged, and draft are rejected.
+      if (data.state === "open") return `${label}: PR #${pr.number} is still open — it must be merged`;
+      if (!data.merged_at) return `${label}: PR #${pr.number} was closed without merging — it must be merged`;
+      return null;
+    }
+    case "text":
+    default:
+      return null;
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -12,23 +97,25 @@ export async function POST(request: Request) {
     const body = await request.json();
     const userId = String(body?.userId || "");
     const productId = String(body?.productId || "");
-    const stageNumber = Number(body?.stageNumber);
-    const todoAppUrl = String(body?.todoAppUrl || "").trim();
-    const taskRepoUrl = String(body?.taskRepoUrl || "").trim();
+    // New clients send taskNumber + values; the old stageNumber/todoAppUrl/
+    // taskRepoUrl body still works and is mapped onto the Task 1 schema.
+    const stageNumber = Number(body?.stageNumber ?? body?.taskNumber);
+    const legacyValues = {
+      deployed_url: String(body?.todoAppUrl || "").trim(),
+      github_repo: String(body?.taskRepoUrl || "").trim(),
+    };
+    const values: Record<string, string> = {};
+    if (body?.values && typeof body.values === "object") {
+      for (const [k, v] of Object.entries(body.values)) {
+        values[String(k)] = String(v ?? "").trim();
+      }
+    } else if (legacyValues.deployed_url || legacyValues.github_repo) {
+      Object.assign(values, legacyValues);
+    }
 
     if (user.id !== userId) return NextResponse.json({ error: "userId mismatch" }, { status: 403 });
-    if (!productId || !stageNumber || !todoAppUrl || !taskRepoUrl)
+    if (!productId || !stageNumber)
       return NextResponse.json({ error: "Missing fields" }, { status: 400 });
-    if (!isHttpsUrl(todoAppUrl) || !isHttpsUrl(taskRepoUrl))
-      return NextResponse.json({ error: "Both URLs must be https://" }, { status: 400 });
-
-    let todoHost = "";
-    try { todoHost = new URL(todoAppUrl).hostname; }
-    catch { return NextResponse.json({ error: "Invalid todoAppUrl" }, { status: 400 }); }
-    if (isBlockedHost(todoHost)) return NextResponse.json({ error: "todoAppUrl host not allowed" }, { status: 400 });
-
-    const gh = parseGithubRepo(taskRepoUrl);
-    if (!gh) return NextResponse.json({ error: "taskRepoUrl must be github.com/owner/repo" }, { status: 400 });
 
     const svc = serviceClient();
     const { data: product } = await svc.from("products").select("*").eq("id", productId).maybeSingle();
@@ -36,40 +123,39 @@ export async function POST(request: Request) {
     if (Number(product.stage_number) !== stageNumber)
       return NextResponse.json({ error: "stageNumber mismatch" }, { status: 400 });
 
-    // Purchasable gate: Stage 2+ stays visible+unlocked but greyed out until opened.
-    if (!isStagePurchasable(stageNumber))
-      return NextResponse.json({ error: STAGE2_CLOSED_MSG }, { status: 423 });
+    // Purchasable gate: tasks stay visible+unlocked but greyed out until opened.
+    if (!isTaskPurchasable(stageNumber))
+      return NextResponse.json({ error: TASK_CLOSED_MSG }, { status: 423 });
 
     if (stageNumber > 1) {
       const { data: prev } = await svc.from("submissions").select("id")
         .eq("user_id", userId).eq("stage_number", stageNumber - 1).maybeSingle();
-      if (!prev) return NextResponse.json({ error: `Stage ${stageNumber - 1} required first` }, { status: 423 });
+      if (!prev) return NextResponse.json({ error: `Task ${stageNumber - 1} required first` }, { status: 423 });
     }
     const { data: dup } = await svc.from("submissions").select("id")
       .eq("user_id", userId).eq("stage_number", stageNumber).maybeSingle();
-    if (dup) return NextResponse.json({ error: "Already submitted for this stage" }, { status: 409 });
+    if (dup) return NextResponse.json({ error: "Already submitted for this task" }, { status: 409 });
 
-    let appOk = false;
-    try { appOk = (await fetchWithTimeout(todoAppUrl, 2000)).status === 200; }
-    catch { appOk = false; }
-    if (!appOk) return NextResponse.json({ error: "todoAppUrl not reachable (need HTTP 200)" }, { status: 422 });
+    // Schema-driven field validation (driven by the product's
+    // submission_schema; required keys must all be present + valid).
+    const schema: SchemaField[] = Array.isArray(product.submission_schema)
+      ? product.submission_schema
+      : [];
+    const required = schema.filter((f) => f && f.required !== false && f.key);
+    for (const field of required) {
+      const raw = String(values[field.key] || "");
+      if (!raw) return NextResponse.json({ error: `${field.label || field.key} is required` }, { status: 400 });
+      const fail = await validateSubmissionField(field, raw);
+      if (fail) return NextResponse.json({ error: fail }, { status: 422 });
+    }
 
-    const pat = process.env.GITHUB_PAT || "";
-    const ghRes = await fetch(`https://api.github.com/repos/${gh.owner}/${gh.repo}`, {
-      headers: {
-        Accept: "application/vnd.github+json",
-        ...(pat && !pat.includes("placeholder") ? { Authorization: `Bearer ${pat}` } : {}),
-        "User-Agent": "zedu-egret-checkout/1.0",
-      },
-      signal: AbortSignal.timeout(2000),
-    }).catch(() => null);
-    if (!ghRes || ghRes.status === 404) return NextResponse.json({ error: "GitHub repo not found/private" }, { status: 422 });
-    if (!ghRes.ok) return NextResponse.json({ error: `GitHub check failed (${ghRes.status})` }, { status: 422 });
-    const repo = await ghRes.json();
-    if (repo.private || repo.size === 0) return NextResponse.json({ error: "Repo must be public + non-empty" }, { status: 422 });
+    // Legacy column mirror (kept for Stage-1 tooling reading todo_app_url /
+    // task_repo_url). Task 3-style schemas store everything in values only.
+    const todoAppUrl = String(values.deployed_url || values.todoAppUrl || "");
+    const taskRepoUrl = String(values.github_repo || values.mobile_repo || values.taskRepoUrl || "");
 
     const { error: sErr } = await svc.from("submissions").insert({
-      user_id: userId, stage_number: stageNumber, todo_app_url: todoAppUrl, task_repo_url: taskRepoUrl,
+      user_id: userId, stage_number: stageNumber, todo_app_url: todoAppUrl, task_repo_url: taskRepoUrl, values,
     });
     if (sErr) {
       if (String(sErr.message).includes("duplicate")) return NextResponse.json({ error: "Already submitted" }, { status: 409 });
@@ -93,12 +179,12 @@ export async function POST(request: Request) {
     // In-account notification (mirrors the email — sandbox domains only
     // deliver to authorized recipients, so the inbox is the real channel).
     const notifBody = prof
-      ? `Hi ${prof.full_name || ""},\n\nYour Stage ${stageNumber} verification order ${orderNumber} is FULFILLED.\n\nYour name will be added to the contributors list for stage 2 group task, keep working on your individual task.\n\n— Zedu Egret Store`
-      : `Your Stage ${stageNumber} verification order ${orderNumber} is FULFILLED.\n\nYour name will be added to the contributors list for stage 2 group task, keep working on your individual task.`;
+      ? `Hi ${prof.full_name || ""},\n\nYour Task ${stageNumber} verification order ${orderNumber} is FULFILLED.\n\nYour name will be added to the contributors list for the group task, keep working on your individual task.\n\n— Zedu Egret Store`
+      : `Your Task ${stageNumber} verification order ${orderNumber} is FULFILLED.\n\nYour name will be added to the contributors list for the group task, keep working on your individual task.`;
     const { error: nErr } = await svc.from("notifications").insert({
       user_id: userId,
       kind: "order_fulfilled",
-      title: `Stage ${stageNumber} complete — order ${orderNumber}`,
+      title: `Task ${stageNumber} complete — order ${orderNumber}`,
       body: notifBody,
       order_number: orderNumber,
     });

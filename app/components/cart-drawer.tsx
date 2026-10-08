@@ -1,12 +1,25 @@
 import { Alert, Field, btnPrimary, btnSecondary, inputCls } from "./ui";
+import type { SchemaField } from "../api/checkout/route";
 
-export type CartProduct = { id: string; title: string; stage_number: number };
+export type CartProduct = {
+  id: string;
+  title: string;
+  stage_number: number;
+  submission_schema?: SchemaField[];
+};
 
-export default function CartDrawer({ cart, todoUrl, repoUrl, msg, busy, onTodo, onRepo, onClose, onRemove, onCheckout }: {
-  cart: CartProduct; todoUrl: string; repoUrl: string; msg: string; busy: boolean;
-  onTodo: (v: string) => void; onRepo: (v: string) => void;
+export default function CartDrawer({ cart, values, msg, busy, onValues, onClose, onRemove, onCheckout }: {
+  cart: CartProduct; values: Record<string, string>; msg: string; busy: boolean;
+  onValues: (v: Record<string, string>) => void;
   onClose: () => void; onRemove: () => void; onCheckout: () => void;
 }) {
+  const schema: SchemaField[] = Array.isArray(cart.submission_schema) && cart.submission_schema.length > 0
+    ? cart.submission_schema
+    : [
+        { key: "deployed_url", label: "Deployed ToDo app URL", hint: "https only, must return HTTP 200.", type: "live_url", required: true },
+        { key: "github_repo", label: "Task GitHub repo URL", hint: "Public, non-empty github.com/owner/repo.", type: "github_repo", required: true },
+      ];
+  const ready = schema.every((f) => !f.required || String(values[f.key] || "").trim() !== "");
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-label={`Checkout ${cart.title}`}>
       <div className="absolute inset-0 bg-ink/40" onClick={onClose} />
@@ -24,24 +37,29 @@ export default function CartDrawer({ cart, todoUrl, repoUrl, msg, busy, onTodo, 
               <span className="font-semibold text-ink">{cart.title}</span>
               <span className="font-bold text-ink">$0.00</span>
             </div>
-            <p className="mt-0.5 text-[13px] text-muted">Stage {cart.stage_number} verification · zero-cost milestone</p>
+            <p className="mt-0.5 text-[13px] text-muted">Task {cart.stage_number} verification · zero-cost milestone</p>
           </div>
           {msg && <Alert kind="error">{msg}</Alert>}
-          <Field label="Deployed ToDo app URL" hint="https only, must return HTTP 200.">
-            <input className={inputCls} value={todoUrl} onChange={(e) => onTodo(e.target.value)} placeholder="https://your-todo-app.vercel.app" inputMode="url" />
-          </Field>
-          <Field label="Task GitHub repo URL" hint="Public, non-empty github.com/owner/repo.">
-            <input className={inputCls} value={repoUrl} onChange={(e) => onRepo(e.target.value)} placeholder="https://github.com/you/task-repo" inputMode="url" />
-          </Field>
+          {schema.map((f) => (
+            <Field key={f.key} label={f.label} hint={f.hint}>
+              <input
+                className={inputCls}
+                value={values[f.key] || ""}
+                onChange={(e) => onValues({ ...values, [f.key]: e.target.value })}
+                placeholder={f.hint || f.label}
+                inputMode="url"
+              />
+            </Field>
+          ))}
           <ul className="space-y-1.5 rounded-lg border border-line bg-white px-4 py-3 text-[13px] text-muted">
             <li>HTTPS only, no local or private hosts</li>
-            <li>App must return HTTP 200 (2s check)</li>
-            <li>Repo must be public and non-empty</li>
+            <li>Links are validated when you place the order</li>
+            <li>PR links must be merged (not open or unmerged)</li>
           </ul>
         </div>
         <div className="flex flex-col-reverse gap-2 border-t border-line px-5 py-4 sm:flex-row">
           <button className={btnSecondary} onClick={onClose} disabled={busy}>Continue shopping</button>
-          <button className={`${btnPrimary} flex-1`} disabled={busy || !todoUrl || !repoUrl} onClick={onCheckout}>
+          <button className={`${btnPrimary} flex-1`} disabled={busy || !ready} onClick={onCheckout}>
             {busy ? "Verifying..." : "Place order ($0.00)"}
           </button>
         </div>

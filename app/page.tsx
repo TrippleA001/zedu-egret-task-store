@@ -3,13 +3,27 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
-import { isStagePurchasable, STAGE2_CLOSED_MSG } from "@/lib/store";
+import { TASK_CLOSED_MSG, isTaskPurchasable } from "@/lib/store";
 import { useCart } from "@/lib/use-cart";
 import { Alert, Badge, btnSecondary, inputCls } from "./components/ui";
 import CartDrawer from "./components/cart-drawer";
 import SuccessPanel from "./components/success-panel";
 
-type Product = { id: string; title: string; description: string; price: string; stage_number: number };
+type Product = {
+  id: string;
+  title: string;
+  description: string;
+  price: string;
+  stage_number: number;
+  week_number: number;
+  submission_schema?: Array<{
+    key: string;
+    label: string;
+    hint?: string;
+    type: "live_url" | "github_repo" | "drive_url" | "github_pr" | "text";
+    required?: boolean;
+  }>;
+};
 
 export default function StorePage() {
   const router = useRouter();
@@ -21,18 +35,19 @@ export default function StorePage() {
   // to the mobile app. Checkout or "Remove" clears it everywhere.
   const {
     cart,
+    values,
     todoUrl,
     repoUrl,
     loaded: cartLoaded,
     openCart,
     removeCart,
-    setTodoUrl,
-    setRepoUrl,
+    setValues,
   } = useCart();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [msg, setMsg] = useState("");
   const [busy, setBusy] = useState(false);
   const [receipt, setReceipt] = useState("");
+  const [receiptStage, setReceiptStage] = useState(1);
   const [receiptEmail, setReceiptEmail] = useState("");
 
   useEffect(() => {
@@ -64,14 +79,14 @@ export default function StorePage() {
       const r = await fetch("/api/checkout", {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          userId, productId: cart.id, stageNumber: cart.stage_number,
-          todoAppUrl: todoUrl, taskRepoUrl: repoUrl,
+          userId, productId: cart.id, taskNumber: cart.stage_number, values,
         }),
       });
       let j: any = {};
       try { j = await r.json(); } catch { /* non-JSON response — status only */ }
       if (!r.ok) throw new Error(j.error || `Checkout failed (${r.status})`);
       setReceipt(j.order_number);
+      setReceiptStage(cart.stage_number);
       setReceiptEmail(j.email || "skipped");
       setStages((s) => [...s, cart.stage_number]);
       setDrawerOpen(false);
@@ -98,9 +113,9 @@ export default function StorePage() {
       </nav>
       <div className="mt-4 flex flex-wrap items-end justify-between gap-4 border-b border-line pb-6">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">Stage products</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">Task milestones</h1>
           <p className="mt-1 text-sm text-muted">
-            {products.length} product{products.length === 1 ? "" : "s"} · {doneCount} complete · {products.length - doneCount} remaining · milestones are $0.00
+            {products.length} task{products.length === 1 ? "" : "s"} · {doneCount} complete · {products.length - doneCount} remaining · milestones are $0.00
           </p>
         </div>
         {products.length > 0 && (
@@ -114,11 +129,11 @@ export default function StorePage() {
         )}
       </div>
       {receipt && (
-        <SuccessPanel orderNumber={receipt} stage={1} email={receiptEmail} />
+        <SuccessPanel orderNumber={receipt} stage={receiptStage} email={receiptEmail} />
       )}
       <div className="mt-4 flex flex-wrap items-center justify-between gap-2 text-[13px] text-muted">
         <p>{products.length} item{products.length === 1 ? "" : "s"}</p>
-        <p>Sorted by stage</p>
+        <p>Grouped by week</p>
       </div>
       {products.length === 0 ? (
         <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
@@ -134,11 +149,26 @@ export default function StorePage() {
           ))}
         </div>
       ) : (
-        <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-          {products.map((p) => {
+        Array.from(new Set(products.map((p) => p.week_number ?? 1)))
+          .sort((a, b) => a - b)
+          .map((week) => {
+            const weekProducts = products
+              .filter((p) => (p.week_number ?? 1) === week)
+              .sort((a, b) => a.stage_number - b.stage_number);
+            const weekDone = weekProducts.filter((p) => stages.includes(p.stage_number)).length;
+            return (
+              <section key={week} aria-label={`Week ${week}`} className="mt-8">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h2 className="text-lg font-extrabold tracking-tight text-ink">Week {week}</h2>
+                  <p className="text-[13px] text-muted">
+                    {weekDone} of {weekProducts.length} task{weekProducts.length === 1 ? "" : "s"} complete
+                  </p>
+                </div>
+                <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {weekProducts.map((p) => {
             const done = stages.includes(p.stage_number);
             const open = unlocked(p.stage_number);
-            const purchasable = isStagePurchasable(p.stage_number);
+            const purchasable = isTaskPurchasable(p.stage_number);
             return (
               <article key={p.id} className="group flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-muted/40 hover:shadow-lg">
                 <div className={`relative flex h-40 items-center justify-center overflow-hidden ${done || open ? "bg-brand-tint" : "bg-canvas"}`}>
@@ -150,7 +180,7 @@ export default function StorePage() {
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col p-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Zedu Egret · Stage {p.stage_number}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Zedu Egret · Week {p.week_number ?? 1} · Task {p.stage_number}</p>
                   <h3 className="mt-1 text-base font-bold text-ink">{p.title}</h3>
                   <p className="mt-1 line-clamp-3 text-sm text-muted">{p.description}</p>
                   <div className="mt-3 flex items-center gap-2">
@@ -164,14 +194,14 @@ export default function StorePage() {
                       <button className="inline-flex w-full items-center justify-center rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-black" onClick={() => void addToCart(p)}>Add to cart</button>
                     ) : open ? (
                       <div>
-                        <span className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-muted" title={STAGE2_CLOSED_MSG}>
+                        <span className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-muted" title={TASK_CLOSED_MSG}>
                           Add to cart — opening soon
                         </span>
                         <p className="mt-1.5 text-center text-[12px] text-muted">Complete your individual task. Group task opens soon.</p>
                       </div>
                     ) : (
                       <span className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-muted">
-                        Complete Stage {p.stage_number - 1} first
+                        Complete Task {p.stage_number - 1} first
                       </span>
                     )}
                   </div>
@@ -179,17 +209,18 @@ export default function StorePage() {
               </article>
             );
           })}
-        </div>
+                </div>
+              </section>
+            );
+          })
       )}
       {cart && drawerOpen && (
         <CartDrawer
           cart={cart}
-          todoUrl={todoUrl}
-          repoUrl={repoUrl}
+          values={values}
           msg={msg}
           busy={busy}
-          onTodo={setTodoUrl}
-          onRepo={setRepoUrl}
+          onValues={setValues}
           onClose={() => !busy && setDrawerOpen(false)}
           onRemove={() => void removeCart()}
           onCheckout={checkout}

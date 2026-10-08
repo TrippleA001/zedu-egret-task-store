@@ -3,13 +3,54 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { supabaseBrowser } from "./supabase-client";
 
 // Shared product shape (mirrors app/page.tsx + cart-drawer.tsx CartProduct).
-export type CartProduct = { id: string; title: string; stage_number: number };
+export type CartProduct = {
+  id: string;
+  title: string;
+  stage_number: number;
+  submission_schema?: Array<{
+    key: string;
+    label: string;
+    hint?: string;
+    type: "live_url" | "github_repo" | "drive_url" | "github_pr" | "text";
+    required?: boolean;
+  }>;
+};
+
+type CartValues = Record<string, string>;
+
+// Merge a DB row into a values map. Prefers the values JSONB column; falls
+// back to the legacy todo_url/repo_url columns for pre-004 rows.
+function normalizeValues(row: {
+  values?: unknown;
+  todo_url?: unknown;
+  repo_url?: unknown;
+}): CartValues {
+  const out: CartValues = {};
+  if (row.values && typeof row.values === "object" && !Array.isArray(row.values)) {
+    for (const [k, v] of Object.entries(row.values as Record<string, unknown>)) {
+      out[String(k)] = String(v ?? "");
+    }
+  }
+  if (row.todo_url && !out.deployed_url) out.deployed_url = String(row.todo_url);
+  if (row.repo_url && !out.github_repo) out.github_repo = String(row.repo_url);
+  return out;
+}
+
+// Legacy mirror for Task 1-shaped schemas (pre-004 rows have no values map).
+// Prefers modern key names, falls back to the pre-004 field names.
+function legacyMirror(values: CartValues): { todo_url: string | undefined; repo_url: string | undefined } {
+  return {
+    todo_url: values.deployed_url ?? values.todoAppUrl ?? undefined,
+    repo_url: values.github_repo ?? values.mobile_repo ?? values.taskRepoUrl ?? undefined,
+  };
+}
 
 type CartRow = {
   user_id: string;
   product_id: string;
   todo_url: string;
   repo_url: string;
+  values: CartValues;
   updated_at: string;
 };
 
@@ -19,8 +60,9 @@ type CartRow = {
 export function useCart() {
   const [userId, setUserId] = useState("");
   const [cart, setCart] = useState<CartProduct | null>(null);
-  const [todoUrl, setTodoUrlState] = useState("");
-  const [repoUrl, setRepoUrlState] = useState("");
+  // Schema-driven values map (keys come from the product's submission_schema).
+  // Legacy todoUrl/repoUrl are derived for Task 1-shaped schemas.
+  const [values, setValuesState] = useState<CartValues>({});
   const [loaded, setLoaded] = useState(false);
   const updatedAtRef = useRef("");
   const applyingRemote = useRef(false);
@@ -42,21 +84,20 @@ export function useCart() {
       }
       const { data: row } = await sb
         .from("carts")
-        .select("product_id, todo_url, repo_url, updated_at")
+        .select("product_id, todo_url, repo_url, values, updated_at")
         .eq("user_id", uid)
         .maybeSingle();
       if (cancelled) return;
       if (row) {
         const { data: prod } = await sb
           .from("products")
-          .select("id, title, stage_number")
+          .select("id, title, stage_number, week_number, submission_schema")
           .eq("id", row.product_id)
           .maybeSingle();
         if (cancelled) return;
         if (prod) {
           setCart(prod as CartProduct);
-          setTodoUrlState(row.todo_url || "");
-          setRepoUrlState(row.repo_url || "");
+          setValuesState(normalizeValues(row));
           updatedAtRef.current = row.updated_at || "";
         }
       }
@@ -85,8 +126,7 @@ export function useCart() {
           if (payload.eventType === "DELETE") {
             applyingRemote.current = true;
             setCart(null);
-            setTodoUrlState("");
-            setRepoUrlState("");
+            setValuesState({});
             updatedAtRef.current = "";
             applyingRemote.current = false;
             return;
@@ -97,14 +137,13 @@ export function useCart() {
           if (row.updated_at <= updatedAtRef.current) return;
           const { data: prod } = await sb
             .from("products")
-            .select("id, title, stage_number")
+            .select("id, title, stage_number, week_number, submission_schema")
             .eq("id", row.product_id)
             .maybeSingle();
           if (!prod) return;
           applyingRemote.current = true;
           setCart(prod as CartProduct);
-          setTodoUrlState(row.todo_url || "");
-          setRepoUrlState(row.repo_url || "");
+          setValuesState(normalizeValues(row));
           updatedAtRef.current = row.updated_at;
           applyingRemote.current = false;
         }
@@ -125,47 +164,50 @@ export function useCart() {
     const sb = supabaseBrowser();
     const { data: row } = await sb
       .from("carts")
-      .select("product_id, todo_url, repo_url, updated_at")
+      .select("product_id, todo_url, repo_url, values, updated_at")
       .eq("user_id", userId)
       .maybeSingle();
     if (!row) {
       if (cart) {
         const stamp = new Date().toISOString();
+        const legacy = legacyMirror(values);
         const { error } = await sb.from("carts").upsert(
           {
             user_id: userId,
             product_id: cart.id,
-            todo_url: todoUrl,
-            repo_url: repoUrl,
+            todo_url: legacy.todo_url ?? "",
+            repo_url: legacy.repo_url ?? "",
+            values,
             updated_at: stamp,
           },
           { onConflict: "user_id" }
         );
-        if (!error) updatedAtRef.current = stamp;
+        if (!error) {
+          dirtyRef.current = false;
+          updatedAtRef.current = stamp;
+        }
       } else {
         applyingRemote.current = true;
         setCart(null);
-        setTodoUrlState("");
-        setRepoUrlState("");
+        setValuesState({});
         updatedAtRef.current = "";
         applyingRemote.current = false;
       }
       return;
     }
-    if (row.updated_at <= updatedAtRef.current) return;
+    if (row.updated_at && row.updated_at <= updatedAtRef.current) return;
     const { data: prod } = await sb
       .from("products")
-      .select("id, title, stage_number")
+      .select("id, title, stage_number, week_number, submission_schema")
       .eq("id", row.product_id)
       .maybeSingle();
     if (!prod) return;
     applyingRemote.current = true;
     setCart(prod as CartProduct);
-    setTodoUrlState(row.todo_url || "");
-    setRepoUrlState(row.repo_url || "");
+    setValuesState(normalizeValues(row));
     updatedAtRef.current = row.updated_at;
     applyingRemote.current = false;
-  }, [userId, cart, todoUrl, repoUrl]);
+  }, [userId, cart, values]);
 
   useEffect(() => {
     if (!userId) return;
@@ -177,17 +219,22 @@ export function useCart() {
   }, [userId, refresh]);
 
   const writeRow = useCallback(
-    async (patch: Partial<Pick<CartRow, "product_id" | "todo_url" | "repo_url">>) => {
+    async (patch: Partial<CartValues>) => {
       if (!userId || !cart?.id) return;
+      const merged: CartValues = {};
+      for (const [k, v] of Object.entries({ ...values, ...patch })) {
+        merged[k] = String(v ?? "");
+      }
+      const legacy = legacyMirror(merged);
       const stamp = new Date().toISOString();
       const sb = supabaseBrowser();
       const { error } = await sb.from("carts").upsert(
         {
           user_id: userId,
           product_id: cart.id,
-          todo_url: todoUrl,
-          repo_url: repoUrl,
-          ...patch,
+          todo_url: legacy.todo_url ?? "",
+          repo_url: legacy.repo_url ?? "",
+          values: merged,
           updated_at: stamp,
         },
         { onConflict: "user_id" }
@@ -200,13 +247,13 @@ export function useCart() {
         console.error("[use-cart:write-failed]", error.message);
       }
     },
-    [userId, cart, todoUrl, repoUrl]
+    [userId, cart, values]
   );
 
   // Debounced remote write for URL typing (local state updates instantly).
   const urlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const queueUrlWrite = useCallback(
-    (patch: Partial<Pick<CartRow, "todo_url" | "repo_url">>) => {
+  const queueValuesWrite = useCallback(
+    (patch: Partial<CartValues>) => {
       if (urlTimer.current) clearTimeout(urlTimer.current);
       urlTimer.current = setTimeout(() => void writeRow(patch), 600);
     },
@@ -226,8 +273,7 @@ export function useCart() {
       // session/bootstrap is still resolving or the network is slow. The
       // remote write below is best-effort sync, not a gate.
       setCart(product);
-      setTodoUrlState("");
-      setRepoUrlState("");
+      setValuesState({});
       if (!userId) {
         dirtyRef.current = true;
         return;
@@ -241,6 +287,7 @@ export function useCart() {
             product_id: product.id,
             todo_url: "",
             repo_url: "",
+            values: {},
             updated_at: stamp,
           },
           { onConflict: "user_id" }
@@ -258,8 +305,7 @@ export function useCart() {
 
   const removeCart = useCallback(async () => {
     setCart(null);
-    setTodoUrlState("");
-    setRepoUrlState("");
+    setValuesState({});
     updatedAtRef.current = "";
     if (!userId) {
       removePendingRef.current = true;
@@ -277,20 +323,13 @@ export function useCart() {
     }
   }, [userId]);
 
-  const setTodoUrl = useCallback(
-    (v: string) => {
-      setTodoUrlState(v);
-      if (!applyingRemote.current) queueUrlWrite({ todo_url: v });
+  const setValues = useCallback(
+    (v: CartValues) => {
+      setValuesState(v);
+      // Queue only the diff so typing one field doesn't rewrite everything.
+      if (!applyingRemote.current) queueValuesWrite(v);
     },
-    [queueUrlWrite]
-  );
-
-  const setRepoUrl = useCallback(
-    (v: string) => {
-      setRepoUrlState(v);
-      if (!applyingRemote.current) queueUrlWrite({ repo_url: v });
-    },
-    [queueUrlWrite]
+    [queueValuesWrite]
   );
 
   // Reconnect / late-session sync. When the browser comes back online (or the
@@ -324,13 +363,15 @@ export function useCart() {
   return {
     userId,
     cart,
-    todoUrl,
-    repoUrl,
+    values,
+    todoUrl: String(values.deployed_url || values.todoAppUrl || ""),
+    repoUrl: String(values.github_repo || values.mobile_repo || values.taskRepoUrl || ""),
     loaded,
     openCart,
     removeCart,
-    setTodoUrl,
-    setRepoUrl,
+    setValues,
+    setTodoUrl: (v: string) => setValues({ ...values, deployed_url: v }),
+    setRepoUrl: (v: string) => setValues({ ...values, github_repo: v }),
     refresh,
   };
 }
