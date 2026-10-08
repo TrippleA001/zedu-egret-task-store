@@ -67,6 +67,27 @@ A native mobile client with full feature parity against the web storefront:
 `is_open` gates checkout: `false` → grey the button out ("opening soon"); the
 server enforces the same flag with a 423 if checkout is forced.
 
+Live catalog updates (Phase 5, migration `009_products_realtime.sql` — required
+or the channel below never fires): the storefront keeps the catalog in sync
+without a reload, and the app should mirror this exactly:
+
+1. Fetch `/api/products` on screen open (as today).
+2. Subscribe to Realtime on `public.products` (anon key, no filter — everyone
+   sees the same catalog):
+
+   ```ts
+   supabase
+     .channel("products")
+     .on("postgres_changes",
+       { event: "*", schema: "public", table: "products" },
+       () => refetchProducts()) // debounce ~250 ms; leads save in bursts
+     .subscribe();
+   ```
+
+3. On app foreground (RN `AppState` → `active`) refetch `/api/products` —
+   the web equivalent is window focus + `visibilitychange`, and it covers
+   sleep gaps where the socket dropped. Cheap: one uncached GET.
+
 ### `GET /api/orders` — Bearer auth
 `{ orders: [...], stages: number[] }` — `stages` = completed stage numbers,
 drives locks + progress.
