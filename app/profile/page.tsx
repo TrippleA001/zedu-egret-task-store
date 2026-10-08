@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
 import { SKILL_LEVELS } from "@/lib/constants";
+import { NameCard } from "../components/name-card";
 import { Alert, Badge, btnPrimary, btnSecondary, inputCls } from "../components/ui";
 
 type Product = {
@@ -184,6 +185,9 @@ export default function ProfilePage() {
         <p className="mt-1 text-sm text-muted">
           Onboarding details and task history. Profile edits go through a change request for admin review.
         </p>
+        <div className="mt-4 max-w-md">
+          <NameCard name={profile.full_name} stages={stages} tasks={products} sub={`${stages.length} of ${products.length} tasks passed`} />
+        </div>
       </div>
 
       <section aria-label="Onboarding details" className="mt-8">

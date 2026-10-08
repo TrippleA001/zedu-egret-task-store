@@ -18,6 +18,7 @@ function initials(email: string) {
 function navLinks(pathname: string) {
   const items = [
     { href: "/", label: "Catalog" },
+    { href: "/progress", label: "Progress" },
     { href: "/profile", label: "Profile" },
     { href: "/contributors", label: "Contributors" },
     { href: "/onboarding", label: "Onboarding" },
@@ -221,6 +222,7 @@ export default function SiteHeader({ cartCount, onCartOpen }: {
       {mobileOpen && (
         <nav className="border-t border-line bg-white px-4 py-2 md:hidden" aria-label="Mobile">
           <Link href="/" className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${pathname === "/" ? "bg-canvas text-ink" : "text-muted"}`}>Catalog</Link>
+          <Link href="/progress" className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${pathname === "/progress" ? "bg-canvas text-ink" : "text-muted"}`}>Progress</Link>
           <Link href="/profile" className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${pathname === "/profile" ? "bg-canvas text-ink" : "text-muted"}`}>Profile</Link>
           <Link href="/contributors" className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${pathname === "/contributors" ? "bg-canvas text-ink" : "text-muted"}`}>Contributors</Link>
           <Link href="/onboarding" className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${pathname === "/onboarding" ? "bg-canvas text-ink" : "text-muted"}`}>Onboarding</Link>

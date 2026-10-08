@@ -106,6 +106,15 @@ previous value itself — never send `old_value`. Success:
 Read pending/status via Supabase RLS:
 `sb.from("change_requests").select("*").eq("user_id", uid)` (owner read only).
 
+### `GET /api/progress` — Bearer auth (Phase 3)
+Cohort progress board: every member's pass state per task. Returns
+`{ tasks: [{ stage_number, week_number, title }],
+members: [{ name, stages: number[] }] }` — names + stage numbers only,
+never emails or submission URLs. 401 without a valid token, 403 without an
+onboarded `users` row. `members` is sorted by tasks passed desc, then name
+asc. Tier your own name card client-side: 0–1 passed = gray, 2–3 = amber,
+all = green (see `lib/name-card` logic in `app/components/name-card.tsx`).
+
 ## 5. Cart sync protocol (exact contract — implement verbatim)
 
 Table `public.carts` (migration `supabase/migrations/003_cart.sql`):

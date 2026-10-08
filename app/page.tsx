@@ -6,6 +6,7 @@ import { supabaseBrowser } from "@/lib/supabase-client";
 import { TASK_CLOSED_MSG, isTaskPurchasable } from "@/lib/store";
 import { useCart } from "@/lib/use-cart";
 import { Alert, Badge, btnSecondary, inputCls } from "./components/ui";
+import { NameCard } from "./components/name-card";
 import CartDrawer from "./components/cart-drawer";
 import SuccessPanel from "./components/success-panel";
 
@@ -30,6 +31,7 @@ export default function StorePage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [stages, setStages] = useState<number[]>([]);
   const [userId, setUserId] = useState("");
+  const [fullName, setFullName] = useState("");
   // Persisted cross-device cart (Supabase + Realtime). Closing the drawer
   // minimizes — it does NOT discard — so the cart survives refresh and syncs
   // to the mobile app. Checkout or "Remove" clears it everywhere.
@@ -56,8 +58,9 @@ export default function StorePage() {
       const { data } = await sb.auth.getUser();
       if (!data.user) { router.replace("/login"); return; }
       setUserId(data.user.id);
-      const { data: prof } = await sb.from("users").select("id").eq("id", data.user.id).maybeSingle();
+      const { data: prof } = await sb.from("users").select("id, full_name").eq("id", data.user.id).maybeSingle();
       if (!prof) { router.replace("/onboarding"); return; }
+      setFullName(prof.full_name || "");
       const rp = await fetch("/api/products").then((r) => r.json());
       if (rp.items) setProducts(rp.items);
       const ro = await fetch("/api/orders").then((r) => r.json());
@@ -119,12 +122,19 @@ export default function StorePage() {
           </p>
         </div>
         {products.length > 0 && (
-          <div className="flex items-center gap-3 text-[13px] font-semibold text-muted">
-            <span>Progress</span>
-            <div className="h-2 w-32 overflow-hidden rounded-full bg-canvas ring-1 ring-inset ring-line sm:w-40">
-              <div className="h-full rounded-full bg-brand transition-all duration-500" style={{ width: `${Math.round((doneCount / totalCount) * 100)}%` }} />
+          <div className="flex flex-col items-stretch gap-3 sm:items-end">
+            <div className="flex items-center gap-3 text-[13px] font-semibold text-muted">
+              <span>Progress</span>
+              <div className="h-2 w-32 overflow-hidden rounded-full bg-canvas ring-1 ring-inset ring-line sm:w-40">
+                <div className="h-full rounded-full bg-brand transition-all duration-500" style={{ width: `${Math.round((doneCount / totalCount) * 100)}%` }} />
+              </div>
+              <span className="text-ink">{Math.round((doneCount / totalCount) * 100)}%</span>
             </div>
-            <span className="text-ink">{Math.round((doneCount / totalCount) * 100)}%</span>
+            {fullName && (
+              <div className="w-full sm:w-80">
+                <NameCard name={fullName} stages={stages} tasks={products} />
+              </div>
+            )}
           </div>
         )}
       </div>
