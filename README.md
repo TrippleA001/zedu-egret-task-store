@@ -51,6 +51,7 @@ Run in order in the Supabase SQL Editor:
 5. `supabase/migrations/005_change_requests.sql` — profile change-request queue + owner-only RLS read
 6. `supabase/migrations/006_admin_roles.sql` — `users.role` (member/admin) + queue index; drops the client-side users UPDATE policy (all profile writes are service-role). Promote an admin with:
    `update public.users set role='admin' where workspace_email='…';`
+7. `supabase/migrations/007_task1_schema.sql` — moves Task 1's checkout form (deployed URL + GitHub repo) from a hardcoded fallback into its product row (admin-editable in `/admin`)
 
 ## Opening Stage 2 later
 

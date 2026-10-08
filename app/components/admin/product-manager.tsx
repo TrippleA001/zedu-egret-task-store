@@ -209,7 +209,7 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
             <p className="mt-2 truncate text-[12px] text-muted">
               {(p.submission_schema || []).length > 0
                 ? `Form: ${(p.submission_schema || []).map((f) => f.key).join(", ")}`
-                : "Form: default (deployed URL + repo)"}
+                : "No form configured — checkout disabled"}
             </p>
             {editing !== p.id && (
               <div className="mt-3 flex items-center gap-3">

@@ -141,6 +141,10 @@ export async function POST(request: Request) {
     const schema: SchemaField[] = Array.isArray(product.submission_schema)
       ? product.submission_schema
       : [];
+    // No form configured = nothing to verify against, so refuse checkout
+    // instead of accepting an empty submission (mirrors the drawer UI).
+    if (schema.length === 0)
+      return NextResponse.json({ error: "This task has no submission form configured yet" }, { status: 422 });
     const required = schema.filter((f) => f && f.required !== false && f.key);
     for (const field of required) {
       const raw = String(values[field.key] || "");
