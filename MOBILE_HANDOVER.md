@@ -16,7 +16,7 @@ A native mobile client with full feature parity against the web storefront:
 |---|---|---|---|
 | 1 | Login (Google OAuth) | `app/login/page.tsx` | Supabase Auth |
 | 2 | Onboarding wizard (3 steps) | `app/onboarding/page.tsx`, `step-two.tsx` | `POST /api/onboarding/verify`, `POST /api/onboarding/complete` |
-| 3 | Storefront catalog + stage locks | `app/page.tsx` | `GET /api/products`, `GET /api/orders` + `STAGE_OPEN` |
+| 3 | Storefront catalog + stage locks | `app/page.tsx` | `GET /api/products`, `GET /api/orders` + `is_open` per product |
 | 4 | Cart + checkout | `app/page.tsx`, `components/cart-drawer.tsx`, `lib/use-cart.ts` | `carts` table (Realtime) + `POST /api/checkout` |
 | 5 | Order receipts / success | `components/success-panel.tsx` | `GET /api/orders` |
 | 6 | Notifications inbox | (header badge) | `GET/PATCH /api/notifications` |
@@ -62,8 +62,10 @@ A native mobile client with full feature parity against the web storefront:
 > (422). See `supabase/migrations/004_weeks_tasks.sql` for current tasks.
 
 ### `GET /api/products` — no auth
-`{ items: [{ id, title, description, price, stage_number, week_number, submission_schema }] }`
+`{ items: [{ id, title, description, price, stage_number, week_number, is_open, submission_schema }] }`
 (sorted by week, then stage). Stage 1 = `$0.00` active; Stage 2+ lock semantics below.
+`is_open` gates checkout: `false` → grey the button out ("opening soon"); the
+server enforces the same flag with a 423 if checkout is forced.
 
 ### `GET /api/orders` — Bearer auth
 `{ orders: [...], stages: number[] }` — `stages` = completed stage numbers,
@@ -158,15 +160,13 @@ Rules (mirror web `lib/use-cart.ts`):
 Pure TypeScript, no Next.js imports — copy these files into the mobile repo
 (keep in sync manually if they change):
 
-- `lib/store.ts` → `TASK_OPEN` (plus `STAGE_OPEN` alias), `isTaskPurchasable()`,
-  `TASK_CLOSED_MSG`. **Same map must gate the same task numbers** or mobile
-  will offer checkout the server rejects (423).
 - `lib/validation.ts` → `isHttpsUrl`, `isBlockedHost`,
   `parseGithubRepo`, `parseGithubPr`, `parseDriveUrl`, normalizers. Reuse for
   client-side pre-checks so the user gets instant feedback; server re-validates
-  anyway. Render checkout inputs from each product's `submission_schema`
-  (`live_url` | `github_repo` | `drive_url` | `github_pr` | `text`) — Task 3
-  needs 4 inputs, not 2.
+  anyway. Render checkout inputs from each product's `submission_schema` — an
+  empty/missing schema means checkout is disabled (the server returns 422).
+  (`lib/store.ts` no longer exists: the open/closed gate is `is_open` on each
+  product — there is no client-side map to copy.)
 
 ## 7. Screen-by-screen notes
 
@@ -176,8 +176,8 @@ Pure TypeScript, no Next.js imports — copy these files into the mobile repo
    Finish → `complete`. Respect each error message verbatim.
 2. **Storefront**: week sections with task cards; per-task state machine
    from web `app/page.tsx`: done (in `stages`) → "Completed"; unlocked +
-   purchasable → "Add to cart"; unlocked but closed → greyed +
-   `TASK_CLOSED_MSG`; locked → "Complete Task N-1 first".
+   `is_open` → "Add to cart"; unlocked but closed (`is_open=false`) → greyed
+   "opening soon"; locked → "Complete Task N-1 first".
    `unlocked = task===1 || stages.includes(task-1)`.
 3. **Cart/checkout**: bottom-sheet ≈ web `CartDrawer`; inputs rendered from
    the product's `submission_schema`; "Place order ($0.00)" disabled until

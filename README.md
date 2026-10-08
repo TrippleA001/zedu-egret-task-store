@@ -52,12 +52,15 @@ Run in order in the Supabase SQL Editor:
 6. `supabase/migrations/006_admin_roles.sql` — `users.role` (member/admin) + queue index; drops the client-side users UPDATE policy (all profile writes are service-role). Promote an admin with:
    `update public.users set role='admin' where workspace_email='…';`
 7. `supabase/migrations/007_task1_schema.sql` — moves Task 1's checkout form (deployed URL + GitHub repo) from a hardcoded fallback into its product row (admin-editable in `/admin`)
+8. `supabase/migrations/008_task_open.sql` — `products.is_open` replaces the code-bound `TASK_OPEN` gate; backfills tasks 1–5 open, new tasks closed by default. Toggle per task from `/admin` (or set `is_open` directly)
 
-## Opening Stage 2 later
+## Opening a task later
 
-Stage 2 stays visible and **Unlocked** after Stage 1, but `Add to cart` is greyed out
-("opening soon"). To open it, set `2: true` in `lib/store.ts` → `STAGE_OPEN` and redeploy.
-The checkout API enforces the same map server-side (returns 423 otherwise).
+Tasks stay visible and **Unlocked** after their prerequisite, but `Add to cart` is
+greyed out ("opening soon") until the task is opened. Open it from the admin
+console (`/admin` → **Open checkout** on the task's card, or the **Open** checkbox
+in the edit form). The checkout API enforces the same `products.is_open` flag
+server-side (returns 423 otherwise) — no redeploy needed.
 
 ## Quick start
 

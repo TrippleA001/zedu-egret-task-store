@@ -2,8 +2,8 @@ import { NextResponse } from "next/server";
 import { authUser, isAdminUser, serviceClient } from "@/lib/api-auth";
 import { sanitizeText, submissionSchemaError } from "@/lib/validation";
 
-// Note: catalog visibility is `is_active` here; the checkout purchasable
-// gate stays TASK_OPEN in lib/store.ts (see AGENTS.md stage-gating).
+// `is_active` = catalog visibility; `is_open` = purchasable gate enforced
+// by checkout (423 when closed). Both toggled from the admin console.
 
 type SchemaDef = {
   key: string;
@@ -43,6 +43,8 @@ function fieldErrors(body: Record<string, unknown>, { creating }: { creating: bo
   }
   if (body.is_active !== undefined && typeof body.is_active !== "boolean")
     return "is_active must be true or false";
+  if (body.is_open !== undefined && typeof body.is_open !== "boolean")
+    return "is_open must be true or false";
   if (body.submission_schema !== undefined) {
     const err = submissionSchemaError(body.submission_schema);
     if (err) return err;
@@ -78,6 +80,7 @@ export async function POST(request: Request) {
         stage_number: Number(body.stage_number),
         week_number: body.week_number != null ? Number(body.week_number) : 1,
         is_active: body.is_active !== false,
+        is_open: body.is_open === true,
         submission_schema: cleanSchema(body.submission_schema ?? []),
       })
       .select("*")
@@ -113,6 +116,7 @@ export async function PATCH(request: Request) {
     if (body.stage_number !== undefined) patch.stage_number = Number(body.stage_number);
     if (body.week_number !== undefined) patch.week_number = Number(body.week_number);
     if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active);
+    if (body.is_open !== undefined) patch.is_open = Boolean(body.is_open);
     if (body.submission_schema !== undefined) patch.submission_schema = cleanSchema(body.submission_schema);
     if (Object.keys(patch).length === 0)
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });

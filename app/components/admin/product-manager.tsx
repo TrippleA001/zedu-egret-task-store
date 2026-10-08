@@ -19,6 +19,7 @@ export type AdminProduct = {
   stage_number: number;
   week_number: number;
   is_active: boolean;
+  is_open: boolean;
   submission_schema: SchemaDef[];
 };
 
@@ -29,6 +30,7 @@ type FormState = {
   stage_number: string;
   week_number: string;
   is_active: boolean;
+  is_open: boolean;
   schemaText: string;
 };
 
@@ -39,6 +41,7 @@ const EMPTY_FORM: FormState = {
   stage_number: "",
   week_number: "1",
   is_active: true,
+  is_open: false,
   schemaText: "",
 };
 
@@ -50,6 +53,7 @@ function formFor(p: AdminProduct): FormState {
     stage_number: String(p.stage_number),
     week_number: String(p.week_number ?? 1),
     is_active: p.is_active,
+    is_open: p.is_open,
     schemaText: JSON.stringify(p.submission_schema || [], null, 2),
   };
 }
@@ -90,6 +94,7 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
         stage_number: Number(form.stage_number),
         week_number: Number(form.week_number),
         is_active: form.is_active,
+        is_open: form.is_open,
         submission_schema: schema,
       };
       const r = await fetch("/api/admin/products", {
@@ -127,13 +132,31 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
     }
   };
 
+  const toggleOpen = async (p: AdminProduct) => {
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      const r = await fetch("/api/admin/products", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: p.id, is_open: !p.is_open }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `Update failed (${r.status})`);
+      router.refresh();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section aria-label="Products">
       <div className="flex items-end justify-between gap-3">
         <div>
           <h2 className="text-lg font-extrabold tracking-tight text-ink">Products</h2>
           <p className="mt-1 text-sm text-muted">
-            Task catalog rows and their submission forms. Checkout unlock order is still controlled by the store config.
+            Task catalog rows, their submission forms, and the open/closed checkout gate.
           </p>
         </div>
         {editing === null && (
@@ -171,6 +194,10 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
               <input type="checkbox" checked={form.is_active} onChange={(e) => set({ is_active: e.target.checked })} className="h-4 w-4 accent-[var(--color-brand,#008060)]" />
               <span className="text-sm font-medium text-ink">Active (visible in catalog)</span>
             </label>
+            <label className="flex items-end gap-2 pb-2.5">
+              <input type="checkbox" checked={form.is_open} onChange={(e) => set({ is_open: e.target.checked })} className="h-4 w-4 accent-[var(--color-brand,#008060)]" />
+              <span className="text-sm font-medium text-ink">Open (purchasable in checkout)</span>
+            </label>
             <label className="sm:col-span-2 lg:col-span-4">
               <span className="block text-sm font-medium text-ink">Submission schema (JSON)</span>
               <span className="mt-0.5 block text-[12px] text-muted">
@@ -204,7 +231,10 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
                 <h3 className="mt-0.5 truncate text-sm font-bold text-ink" title={p.title}>{p.title}</h3>
                 <p className="mt-1 truncate text-[13px] text-muted" title={p.description || undefined}>{p.description || "No description"}</p>
               </div>
-              <Badge tone={p.is_active ? "open" : "locked"}>{p.is_active ? "Active" : "Hidden"}</Badge>
+              <div className="flex shrink-0 items-center gap-1.5">
+                <Badge tone={p.is_open ? "open" : "locked"}>{p.is_open ? "Open" : "Closed"}</Badge>
+                <Badge tone={p.is_active ? "open" : "locked"}>{p.is_active ? "Active" : "Hidden"}</Badge>
+              </div>
             </div>
             <p className="mt-2 truncate text-[12px] text-muted">
               {(p.submission_schema || []).length > 0
@@ -214,6 +244,9 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
             {editing !== p.id && (
               <div className="mt-3 flex items-center gap-3">
                 <button type="button" className="text-[13px] font-semibold text-brand hover:underline" onClick={() => openEdit(p)}>Edit</button>
+                <button type="button" disabled={busy} className="text-[13px] font-semibold text-muted hover:text-ink hover:underline disabled:opacity-50" onClick={() => void toggleOpen(p)}>
+                  {p.is_open ? "Close checkout" : "Open checkout"}
+                </button>
                 <button type="button" disabled={busy} className="text-[13px] font-semibold text-muted hover:text-ink hover:underline disabled:opacity-50" onClick={() => void toggleActive(p)}>
                   {p.is_active ? "Hide from catalog" : "Show in catalog"}
                 </button>

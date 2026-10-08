@@ -80,6 +80,7 @@ export default async function AdminPage() {
     stage_number: p.stage_number,
     week_number: p.week_number ?? 1,
     is_active: p.is_active !== false,
+    is_open: p.is_open === true,
     submission_schema: Array.isArray(p.submission_schema) ? p.submission_schema : [],
   }));
   const schemaFor = (stage: number): SchemaDef[] =>

@@ -40,7 +40,6 @@ conventions, and the cart-sync architecture. Where the two disagree,
 | `app/api/checkout|products|orders|notifications|onboarding/*|roster/emails/` | API routes — validation + writes live here |
 | `lib/api-auth.ts` | Shared auth: cookie session first, then Bearer token |
 | `lib/use-cart.ts` | Cross-device cart hook: Supabase row + Realtime subscription |
-| `lib/store.ts` | `STAGE_OPEN` availability map + `isStagePurchasable()` |
 | `lib/validation.ts` | Pure validators (URLs, GitHub, roster fields) — safe to share with mobile |
 | `lib/supabase-client.ts`, `lib/supabase-server.ts` | Browser + server Supabase clients |
 | `lib/side-effects.ts`, `lib/constants.ts` | Mailgun, webhooks, timeouts, shared constants |
@@ -84,9 +83,10 @@ re-run tsc.
   (2 s) → GitHub API check → insert submission → insert order (retry on
   order-number collision) → notification + email + contributors webhook.
   Keep this order when editing; each guard's status code is contractual.
-- **Stage gating:** `STAGE_OPEN` in `lib/store.ts` is the single source for
-  "purchasable". Server enforces it (423 + `STAGE2_CLOSED_MSG`); web mirrors
-  it for button state. To open a stage, flip the map + redeploy.
+- **Stage gating:** `products.is_open` is the single source for
+  "purchasable" (toggle from `/admin`; new tasks default closed). Server
+  enforces it (423); web mirrors it for button state. No code change or
+  redeploy needed to open a task.
 - **Cart:** source of truth = `public.carts` row (see section below). Never
   reintroduce ephemeral-only cart state.
 - **Formatting:** Prettier defaults (double quotes, semicolons). Unused
