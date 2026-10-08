@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { authUser, isAdminUser, serviceClient } from "@/lib/api-auth";
 import RequestQueue, { type AdminRequest } from "@/app/components/admin/request-queue";
+import MemberTeams, { type AdminMember } from "@/app/components/admin/member-teams";
 import ProductManager, { type AdminProduct, type SchemaDef } from "@/app/components/admin/product-manager";
 import { btnPrimary } from "@/app/components/ui";
 
@@ -27,6 +28,14 @@ type RequestRow = {
   created_at: string;
   decided_at: string | null;
   users: { full_name?: string } | Array<{ full_name?: string }> | null;
+};
+
+type MemberRow = {
+  id: string;
+  full_name: string;
+  auth_email: string;
+  workspace_email: string | null;
+  sub_team: string | null;
 };
 
 function joinUser<T>(u: T | T[] | null): T | null {
@@ -58,7 +67,7 @@ export default async function AdminPage() {
   }
 
   const svc = serviceClient();
-  const [{ data: products }, { data: submissions }, { data: requests }] = await Promise.all([
+  const [{ data: products }, { data: submissions }, { data: requests }, { data: members }] = await Promise.all([
     svc.from("products").select("*").order("stage_number"),
     svc
       .from("submissions")
@@ -70,6 +79,11 @@ export default async function AdminPage() {
       .select("id, field, old_value, new_value, note, status, created_at, decided_at, users(full_name)")
       .order("created_at", { ascending: false })
       .limit(100),
+    svc
+      .from("users")
+      .select("id, full_name, auth_email, workspace_email, sub_team")
+      .order("full_name")
+      .limit(500),
   ]);
 
   const adminProducts: AdminProduct[] = (products || []).map((p: Record<string, any>) => ({
@@ -99,6 +113,13 @@ export default async function AdminPage() {
   }));
 
   const pendingCount = adminRequests.filter((r) => r.status === "pending").length;
+  const adminMembers: AdminMember[] = (members || []).map((m: MemberRow) => ({
+    id: m.id,
+    full_name: m.full_name || "Unknown member",
+    auth_email: m.auth_email,
+    workspace_email: m.workspace_email,
+    sub_team: m.sub_team,
+  }));
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 sm:py-10">
@@ -108,12 +129,13 @@ export default async function AdminPage() {
       <div className="mt-4 border-b border-line pb-6">
         <h1 className="text-2xl font-extrabold tracking-tight text-ink sm:text-3xl">Admin console</h1>
         <p className="mt-1 text-sm text-muted">
-          {pendingCount > 0 ? `${pendingCount} change request${pendingCount === 1 ? "" : "s"} waiting for review.` : "Catalog, submissions and profile change requests."}
+          {pendingCount > 0 ? `${pendingCount} change request${pendingCount === 1 ? "" : "s"} waiting for review.` : "Catalog, submissions, sub-teams and profile change requests."}
         </p>
       </div>
 
       <div className="mt-8 space-y-12">
         <RequestQueue requests={adminRequests} />
+        <MemberTeams members={adminMembers} />
         <ProductManager products={adminProducts} />
 
         <section aria-label="All submissions">

@@ -85,7 +85,8 @@ export function sanitizeText(s: string, max = 255) {
 }
 
 // Profile fields a user may request changes to. Identity fields (emails,
-// zedu_id) and sub_team (auto-assigned) are deliberately excluded.
+// zedu_id) and sub_team (assigned by admins in /admin) are deliberately
+// excluded — those go through the lead, not a change request.
 export const CHANGEABLE_FIELDS = [
   "full_name",
   "github_url",
@@ -96,6 +97,14 @@ export type ChangeableField = (typeof CHANGEABLE_FIELDS)[number];
 
 export function isChangeableField(f: string): f is ChangeableField {
   return (CHANGEABLE_FIELDS as readonly string[]).includes(f);
+}
+
+// Sub-team names are admin-assigned free text (onboarding leaves the column
+// null). Empty string clears the assignment; the column is VARCHAR(100).
+export function subTeamError(raw: string): string | null {
+  const v = sanitizeText(raw, 200);
+  if (v.length > 100) return "Sub-team name must be at most 100 characters";
+  return null;
 }
 
 // Column on public.users each changeable field maps to. Shared by the
