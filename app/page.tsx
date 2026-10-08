@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
-import { TASK_CLOSED_MSG, isTaskPurchasable } from "@/lib/store";
 import { useCart } from "@/lib/use-cart";
 import { Alert, Badge, btnSecondary, inputCls } from "./components/ui";
 import CartDrawer from "./components/cart-drawer";
@@ -16,6 +15,7 @@ type Product = {
   price: string;
   stage_number: number;
   week_number: number;
+  is_open?: boolean;
   submission_schema?: Array<{
     key: string;
     label: string;
@@ -168,7 +168,7 @@ export default function StorePage() {
           {weekProducts.map((p) => {
             const done = stages.includes(p.stage_number);
             const open = unlocked(p.stage_number);
-            const purchasable = isTaskPurchasable(p.stage_number);
+            const purchasable = p.is_open === true;
             return (
               <article key={p.id} className="group flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-muted/40 hover:shadow-lg">
                 <div className={`relative flex h-40 items-center justify-center overflow-hidden ${done || open ? "bg-brand-tint" : "bg-canvas"}`}>
@@ -194,7 +194,7 @@ export default function StorePage() {
                       <button className="inline-flex w-full items-center justify-center rounded-lg bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-black" onClick={() => void addToCart(p)}>Add to cart</button>
                     ) : open ? (
                       <div>
-                        <span className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-muted" title={TASK_CLOSED_MSG}>
+                        <span className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-muted" title="This task is not open yet — it unlocks when announced.">
                           Add to cart — opening soon
                         </span>
                         <p className="mt-1.5 text-center text-[12px] text-muted">Complete your individual task. Group task opens soon.</p>

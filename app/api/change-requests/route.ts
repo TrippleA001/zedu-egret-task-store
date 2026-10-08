@@ -1,19 +1,12 @@
 import { NextResponse } from "next/server";
 import { authUser, serviceClient } from "@/lib/api-auth";
 import {
+  CHANGE_FIELD_COLUMN,
   changeValueError,
   isChangeableField,
   normalizeTelegram,
   sanitizeText,
 } from "@/lib/validation";
-
-// Column on public.users each changeable field maps to.
-const FIELD_COLUMN: Record<string, string> = {
-  full_name: "full_name",
-  github_url: "github_url",
-  telegram_handle: "telegram_handle",
-  skill_rating: "skill_rating",
-};
 
 // POST /api/change-requests — queue a profile change for lead approval.
 // Body: { field, new_value, note? }. The current value is read server-side
@@ -40,7 +33,7 @@ export async function POST(request: Request) {
       : String(Number(raw));
 
     const svc = serviceClient();
-    const column = FIELD_COLUMN[field];
+    const column = CHANGE_FIELD_COLUMN[field];
     const { data: profileRow } = await svc.from("users").select(`id, ${column}`).eq("id", user.id).maybeSingle();
     const profile = profileRow as Record<string, any> | null;
     if (!profile) return NextResponse.json({ error: "Complete onboarding first" }, { status: 404 });

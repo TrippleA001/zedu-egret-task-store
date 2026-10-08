@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { isBlockedHost, isHttpsUrl, parseDriveUrl, parseGithubPr, parseGithubRepo, generateOrderNumber } from "@/lib/validation";
 import { fetchWithTimeout, sendReceiptEmail, triggerContributorsBuild } from "@/lib/side-effects";
-import { TASK_CLOSED_MSG, isTaskPurchasable } from "@/lib/store";
 import { authUser, serviceClient } from "@/lib/api-auth";
 
 export type SchemaField = {
@@ -123,9 +122,13 @@ export async function POST(request: Request) {
     if (Number(product.stage_number) !== stageNumber)
       return NextResponse.json({ error: "stageNumber mismatch" }, { status: 400 });
 
-    // Purchasable gate: tasks stay visible+unlocked but greyed out until opened.
-    if (!isTaskPurchasable(stageNumber))
-      return NextResponse.json({ error: TASK_CLOSED_MSG }, { status: 423 });
+    // Purchasable gate: tasks stay visible+unlocked but greyed out until
+    // opened (products.is_open, toggled from /admin).
+    if (!product.is_open)
+      return NextResponse.json(
+        { error: "This task is not open yet — it unlocks when announced." },
+        { status: 423 },
+      );
 
     if (stageNumber > 1) {
       const { data: prev } = await svc.from("submissions").select("id")
@@ -141,6 +144,10 @@ export async function POST(request: Request) {
     const schema: SchemaField[] = Array.isArray(product.submission_schema)
       ? product.submission_schema
       : [];
+    // No form configured = nothing to verify against, so refuse checkout
+    // instead of accepting an empty submission (mirrors the drawer UI).
+    if (schema.length === 0)
+      return NextResponse.json({ error: "This task has no submission form configured yet" }, { status: 422 });
     const required = schema.filter((f) => f && f.required !== false && f.key);
     for (const field of required) {
       const raw = String(values[field.key] || "");

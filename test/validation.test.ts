@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseGithubRepo, parseGithubPr, parseDriveUrl, isBlockedHost, isHttpsUrl, generateOrderNumber, normalizeEmail, normalizeTelegram, telegramError, CHANGEABLE_FIELDS, isChangeableField, changeValueError } from "../lib/validation";
+import { parseGithubRepo, parseGithubPr, parseDriveUrl, isBlockedHost, isHttpsUrl, generateOrderNumber, normalizeEmail, normalizeTelegram, telegramError, CHANGEABLE_FIELDS, isChangeableField, changeValueError, submissionSchemaError, subTeamError } from "../lib/validation";
 
 test("parseGithubRepo accepts full URL and short form", () => {
   assert.deepEqual(parseGithubRepo("https://github.com/octocat/hello-world"), { owner: "octocat", repo: "hello-world" });
@@ -71,4 +71,41 @@ test("changeValueError per field", () => {
   assert.equal(changeValueError("skill_rating", "4"), null);
   assert.equal(changeValueError("skill_rating", "9"), "Skill rating must be 1-5");
   assert.equal(changeValueError("skill_rating", ""), "New value is required");
+});
+
+test("subTeamError accepts free text, caps length", () => {
+  assert.equal(subTeamError(""), null);
+  assert.equal(subTeamError("Frontend"), null);
+  assert.equal(subTeamError("Data & Platform Engineering"), null);
+  assert.equal(subTeamError("x".repeat(101)), "Sub-team name must be at most 100 characters");
+  assert.equal(subTeamError("x".repeat(100)), null);
+});
+
+test("submissionSchemaError accepts valid schemas", () => {
+  assert.equal(submissionSchemaError([]), null);
+  assert.equal(
+    submissionSchemaError([
+      { key: "deployed_url", label: "Deployed app URL", type: "live_url", required: true },
+      { key: "github_repo", label: "Repo", type: "github_repo", hint: "Public repo" },
+    ]),
+    null
+  );
+});
+
+test("submissionSchemaError rejects malformed schemas", () => {
+  assert.ok((submissionSchemaError("nope") || "").includes("JSON array"));
+  assert.ok((submissionSchemaError([{ key: "Bad Key", label: "L", type: "text" }]) || "").includes("snake_case"));
+  assert.ok((submissionSchemaError([{ key: "a", label: "", type: "text" }]) || "").includes("needs a label"));
+  assert.ok((submissionSchemaError([{ key: "a", label: "L", type: "email" }]) || "").includes("unknown type"));
+  assert.ok(
+    (submissionSchemaError([
+      { key: "a", label: "L", type: "text" },
+      { key: "a", label: "L2", type: "text" },
+    ]) || "").includes("Duplicate")
+  );
+  assert.ok((submissionSchemaError([{ key: "a", label: "L", type: "text", required: "yes" }]) || "").includes("required"));
+  assert.ok((submissionSchemaError([{ key: "a", label: "L", type: "text", hint: "x".repeat(201) }]) || "").includes("hint"));
+  assert.ok(
+    (submissionSchemaError(Array.from({ length: 21 }, (_, i) => ({ key: `f${i}`, label: "L", type: "text" }))) || "").includes("20 fields")
+  );
 });
