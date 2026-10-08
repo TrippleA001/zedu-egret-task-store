@@ -20,10 +20,14 @@ type SubmissionRow = {
     | null;
 };
 
-type Contributor = { name: string; handle: string | null };
+type ProductRow = { stage_number: number; week_number: number; title: string };
+
+type Member = { name: string; handle: string | null; stages: number[] };
+type Task = { stage_number: number; week_number: number; title: string };
 
 type PageData = {
-  contributors: Contributor[];
+  members: Member[];
+  tasks: Task[];
   projects: number;
   prs: number;
   issues: number;
@@ -31,49 +35,53 @@ type PageData = {
 };
 
 async function loadData(): Promise<PageData> {
-  const empty = { contributors: [] as Contributor[], projects: 0, prs: 0, issues: 0 };
+  const empty = { members: [] as Member[], tasks: [] as Task[], projects: 0, prs: 0, issues: 0 };
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) {
     return { ...empty, error: "Contributor list is not configured on this deployment." };
   }
 
-  const endpoint = `${url}/rest/v1/submissions?select=stage_number,values,users!inner(full_name,github_url)&order=verified_at.asc`;
+  const headers = {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    Accept: "application/json",
+  };
+
   try {
-    const res = await fetch(endpoint, {
-      headers: {
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        Accept: "application/json",
-      },
-      cache: "no-store",
-    });
+    const res = await fetch(
+      `${url}/rest/v1/submissions?select=stage_number,values,users!inner(full_name,github_url)&order=verified_at.asc`,
+      { headers, cache: "no-store" }
+    );
     if (!res.ok) {
       return { ...empty, error: `Supabase returned ${res.status}.` };
     }
     const rows: SubmissionRow[] = await res.json();
 
-    // Cards list Task 1 passers; stats aggregate verified submission values
-    // across all tasks (repos + merged PRs parsed, issue-keyed values counted
-    // until the upcoming task gives them a dedicated type).
-    const contributors: Contributor[] = [];
-    const seen = new Set<string>();
+    // Cards list Task 1 passers with every stage they cleared; stats aggregate
+    // verified submission values across all tasks (repos + merged PRs parsed,
+    // issue-keyed values counted until the upcoming task gives them a type).
+    const byName = new Map<string, Member>();
     const repos = new Set<string>();
     const prs = new Set<string>();
     const issues = new Set<string>();
     for (const r of rows || []) {
       const u = Array.isArray(r.users) ? r.users[0] : r.users;
       const name = String(u?.full_name || "").trim();
-      if (r.stage_number === 1 && name && !seen.has(name)) {
-        seen.add(name);
-        let handle: string | null = null;
-        try {
-          handle =
-            new URL(String(u?.github_url || "")).pathname.split("/").filter(Boolean)[0] || null;
-        } catch {
-          handle = null;
+      if (name) {
+        let member = byName.get(name);
+        if (!member) {
+          let handle: string | null = null;
+          try {
+            handle =
+              new URL(String(u?.github_url || "")).pathname.split("/").filter(Boolean)[0] || null;
+          } catch {
+            handle = null;
+          }
+          member = { name, handle, stages: [] };
+          byName.set(name, member);
         }
-        contributors.push({ name, handle });
+        if (!member.stages.includes(r.stage_number)) member.stages.push(r.stage_number);
       }
       for (const [k, raw] of Object.entries(r.values || {})) {
         const v = String(raw ?? "").trim();
@@ -91,7 +99,23 @@ async function loadData(): Promise<PageData> {
         if (/issue/i.test(k)) issues.add(v.toLowerCase().replace(/\/+$/, ""));
       }
     }
-    return { contributors, projects: repos.size, prs: prs.size, issues: issues.size, error: null };
+
+    // Insertion order = earliest verified submission, so the grid keeps
+    // "first to finish Task 1 first" like the previous list did.
+    const members = Array.from(byName.values()).filter((m) => m.stages.includes(1));
+
+    let tasks: Task[] = [];
+    try {
+      const pres = await fetch(
+        `${url}/rest/v1/products?select=stage_number,week_number,title&order=stage_number.asc`,
+        { headers, cache: "no-store" }
+      );
+      if (pres.ok) tasks = ((await pres.json()) as ProductRow[]).map((p) => ({ ...p }));
+    } catch {
+      tasks = []; // degrade to the plain All view without week/task chips
+    }
+
+    return { members, tasks, projects: repos.size, prs: prs.size, issues: issues.size, error: null };
   } catch (e: any) {
     return { ...empty, error: e?.message || "Could not load contributors." };
   }
@@ -112,9 +136,37 @@ function GithubMark() {
   );
 }
 
-export default async function ContributorsPage() {
-  const { contributors, projects, prs, issues, error } = await loadData();
-  const total = contributors.length;
+export default async function ContributorsPage({
+  searchParams,
+}: {
+  searchParams?: { week?: string; task?: string };
+}) {
+  const { members, tasks, projects, prs, issues, error } = await loadData();
+  const total = members.length;
+
+  // Filter state lives in the URL: ?week=N selects a week and defaults to its
+  // first task; ?task=M drills into a specific task of that week.
+  const weeks = Array.from(new Set(tasks.map((t) => t.week_number))).sort((a, b) => a - b);
+  const weekParam = Number(searchParams?.week);
+  const taskParam = Number(searchParams?.task);
+  const selectedWeek = weeks.includes(weekParam) ? weekParam : null;
+  const weekTasks = selectedWeek ? tasks.filter((t) => t.week_number === selectedWeek) : [];
+  const selectedTask = selectedWeek
+    ? (weekTasks.find((t) => t.stage_number === taskParam)?.stage_number ??
+      weekTasks[0]?.stage_number ??
+      null)
+    : null;
+
+  const visible =
+    selectedTask === null ? members : members.filter((m) => m.stages.includes(selectedTask));
+  const passers = new Map<number, number>();
+  for (const t of tasks) {
+    passers.set(
+      t.stage_number,
+      members.filter((m) => m.stages.includes(t.stage_number)).length
+    );
+  }
+
   const stats = [
     { amount: String(total), text: "Contributors" },
     { amount: String(projects), text: "Personal projects" },
@@ -122,6 +174,13 @@ export default async function ContributorsPage() {
     { amount: String(issues), text: "Approved issues" },
     { amount: "HNG 15", text: "Internship" },
   ];
+
+  const chip = (active: boolean, size: string) =>
+    `inline-flex items-center gap-1.5 rounded-full font-semibold transition-colors duration-200 ${
+      active
+        ? "bg-brand text-white"
+        : "bg-white text-muted ring-1 ring-inset ring-line hover:text-ink"
+    } ${size}`;
 
   return (
     <section className="relative isolate flex w-full flex-col items-center gap-4 overflow-hidden px-4 py-10 text-center sm:gap-6 sm:px-8 sm:py-16 lg:gap-8 lg:px-12">
@@ -151,6 +210,58 @@ export default async function ContributorsPage() {
         </p>
       )}
 
+      {!error && total > 0 && weeks.length > 0 && (
+        <nav aria-label="Cohort filter" className="flex flex-col items-center gap-2">
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            <Link
+              href="/contributors"
+              className={chip(selectedWeek === null, "px-4 py-2 text-sm")}
+              aria-current={selectedWeek === null ? "page" : undefined}
+            >
+              All
+            </Link>
+            {weeks.map((w) => (
+              <Link
+                key={w}
+                href={`/contributors?week=${w}`}
+                className={chip(selectedWeek === w, "px-4 py-2 text-sm")}
+                aria-current={selectedWeek === w ? "page" : undefined}
+              >
+                Week {w}
+              </Link>
+            ))}
+          </div>
+          {selectedWeek !== null && weekTasks.length > 0 && (
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              {weekTasks.map((t) => (
+                <Link
+                  key={t.stage_number}
+                  href={`/contributors?week=${selectedWeek}&task=${t.stage_number}`}
+                  title={t.title}
+                  className={chip(selectedTask === t.stage_number, "px-3.5 py-1.5 text-[13px]")}
+                  aria-current={selectedTask === t.stage_number ? "page" : undefined}
+                >
+                  Task {t.stage_number}
+                  <span className="text-[11px] font-medium opacity-70">
+                    · {passers.get(t.stage_number) ?? 0}
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
+        </nav>
+      )}
+
+      {!error && total > 0 && (
+        <p className="text-xs text-muted sm:text-sm">
+          {selectedTask === null
+            ? tasks.length > 0
+              ? `${total} contributor${total === 1 ? "" : "s"} · ${tasks.length} task${tasks.length === 1 ? "" : "s"}`
+              : `${total} contributor${total === 1 ? "" : "s"}`
+            : `Task ${selectedTask} — ${visible.length} of ${total} passed`}
+        </p>
+      )}
+
       {!error && total === 0 && (
         <div className="mt-4 w-full max-w-4xl rounded-2xl bg-brand-tint px-6 py-10 text-center">
           <p className="text-sm text-muted">
@@ -159,9 +270,15 @@ export default async function ContributorsPage() {
         </div>
       )}
 
-      {total > 0 && (
-        <ol className="mt-4 grid w-full max-w-7xl grid-cols-1 gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
-          {contributors.map((c, i) => {
+      {!error && selectedTask !== null && visible.length === 0 && (
+        <div className="w-full max-w-4xl rounded-2xl bg-brand-tint px-6 py-10 text-center">
+          <p className="text-sm text-muted">No one has passed Task {selectedTask} yet.</p>
+        </div>
+      )}
+
+      {visible.length > 0 && (
+        <ol className="grid w-full max-w-7xl grid-cols-1 gap-4 text-left sm:grid-cols-2 lg:grid-cols-3">
+          {visible.map((c, i) => {
             const card = (
               <>
                 <span className="flex h-11 w-11 items-center justify-center rounded-full bg-brand-tint text-sm font-bold text-brand-deep">
