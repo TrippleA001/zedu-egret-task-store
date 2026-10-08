@@ -10,9 +10,9 @@ conventions, and the cart-sync architecture. Where the two disagree,
 
 ## Hard rules
 
-- Work on a ticket branch in the contributor's fork. Never push to
-  `dev`/`central-staging`/`staging`/`main` directly; PRs go into
-  `zedu-hng/<repo>:dev`. One ticket = one branch = one PR = one author.
+- Work on a ticket branch in this repo. Never push to `main` directly;
+  PRs go into this repo's `main` (merge via PR, squash preferred).
+  One ticket = one branch = one PR = one author.
 - Keep the change to what the ticket asks. No drive-by refactors, renames,
   or dependency bumps.
 - One logical change per PR, at most ~400 lines of meaningful code

@@ -95,6 +95,17 @@ Body `{ workspace_email, zedu_id, full_name, github_url, telegram_handle, skill_
 ### `GET /api/roster/emails?q=&limit=` — no auth
 `{ items: [{ email, hint }] }` for the Step-1 dropdown.
 
+### `POST /api/change-requests` — Bearer auth (Phase 2)
+Request a profile edit for admin review — the app never edits `users`
+directly. Body `{ field, new_value, note? }` where `field` ∈
+`full_name | github_url | telegram_handle | skill_rating` (emails, Zedu ID
+and sub_team are fixed). Server validates `new_value` per field (400 unknown
+field, 422 invalid, 400 unchanged, 409 pending-duplicate) and captures the
+previous value itself — never send `old_value`. Success:
+`{ ok: true, request: { id, field, old_value, new_value, status } }`.
+Read pending/status via Supabase RLS:
+`sb.from("change_requests").select("*").eq("user_id", uid)` (owner read only).
+
 ## 5. Cart sync protocol (exact contract — implement verbatim)
 
 Table `public.carts` (migration `supabase/migrations/003_cart.sql`):
