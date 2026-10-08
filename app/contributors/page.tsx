@@ -188,7 +188,8 @@ export default async function ContributorsPage({
         Zedu <span className="text-brand">Egret</span> Contributors
       </h1>
       <p className="max-w-[95%] text-xs text-muted sm:max-w-[90%] sm:text-base md:max-w-[65%] lg:max-w-[45%] lg:text-lg">
-        Everyone who has completed Task 1 verification for Team Egret.
+        A brief overview of the contributions of Team Egret to the open source project Zedu Chat
+        during the HNG 15 internship.
       </p>
 
       {/* Stats — mirrors the generated egrets page hero metrics grid */}
