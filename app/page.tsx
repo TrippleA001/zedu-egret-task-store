@@ -50,14 +50,21 @@ export default function StorePage() {
   const [receiptStage, setReceiptStage] = useState(1);
   const [receiptEmail, setReceiptEmail] = useState("");
 
-  // Catalog stays live: the /api/products route is never cached, and this page
-  // refetches on tab focus, window visibility, and Supabase Realtime events on
-  // public.products — so an admin's title/schema/is_open edit lands here without
-  // a reload. Debounced so a burst of edits triggers one fetch, not many.
+  // Catalog stays live: products are read browser-direct (same network path as
+  // /admin and the Realtime channel below), because reads that egress through
+  // Vercel were being served stale data by Supabase while browser-direct reads
+  // track the primary. Refetches on tab focus, window visibility, and
+  // postgres_changes on public.products — debounced so a burst of edits
+  // triggers one fetch, not many.
   const loadProducts = useCallback(async () => {
     try {
-      const rp = await fetch("/api/products").then((r) => r.json());
-      if (rp.items) setProducts(rp.items);
+      const { data, error } = await supabaseBrowser()
+        .from("products")
+        .select("*")
+        .eq("is_active", true)
+        .order("stage_number");
+      if (error) throw error;
+      if (data) setProducts(data as Product[]);
     } catch {
       // transient (offline, dev restart) — keep showing the previous catalog
     }
