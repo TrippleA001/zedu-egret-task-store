@@ -134,3 +134,47 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: e?.message || "product update failed" }, { status: 500 });
   }
 }
+
+// DELETE /api/admin/products — remove a task that has never been ordered.
+// Any order, submission, or cart row referencing it blocks deletion (409) so
+// purchased or earned values are never lost.
+export async function DELETE(request: Request) {
+  const denied = await guard(request);
+  if (denied) return denied;
+  try {
+    const body = await request.json();
+    const id = String(body?.id || "");
+    if (!id) return NextResponse.json({ error: "Product id is required" }, { status: 400 });
+
+    const svc = serviceClient();
+    const { data: product, error: pErr } = await svc
+      .from("products")
+      .select("id, stage_number")
+      .eq("id", id)
+      .maybeSingle();
+    if (pErr) throw pErr;
+    if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+
+    const [{ count: orders }, { count: submissions }, { count: carts }] = await Promise.all([
+      svc.from("orders").select("id", { count: "exact", head: true }).eq("product_id", id),
+      // submissions carry stage numbers, not product ids
+      svc.from("submissions").select("id", { count: "exact", head: true }).eq("stage_number", product.stage_number),
+      svc.from("carts").select("product_id", { count: "exact", head: true }).eq("product_id", id),
+    ]);
+    const blockers: string[] = [];
+    if (orders) blockers.push(`${orders} order${orders === 1 ? "" : "s"}`);
+    if (submissions) blockers.push(`${submissions} submission${submissions === 1 ? "" : "s"}`);
+    if (carts) blockers.push(`${carts} cart${carts === 1 ? "" : "s"}`);
+    if (blockers.length > 0)
+      return NextResponse.json(
+        { error: `Cannot delete — referenced by ${blockers.join(", ")}` },
+        { status: 409 }
+      );
+
+    const { error } = await svc.from("products").delete().eq("id", id);
+    if (error) throw error;
+    return NextResponse.json({ ok: true });
+  } catch (e: any) {
+    return NextResponse.json({ error: e?.message || "product delete failed" }, { status: 500 });
+  }
+}
