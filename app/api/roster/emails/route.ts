@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { supabaseNoStore } from "@/lib/supabase-server";
 
 // GET /api/roster/emails?q=&limit= — secret/privileged key only (server-side).
 // Returns unclaimed roster emails for the Step-1 dropdown. Never leaks zedu_id.
@@ -11,7 +12,8 @@ export async function GET(request: Request) {
 
     const sb = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)!
+      (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)!,
+      supabaseNoStore
     );
     let query = sb
       .from("roster")

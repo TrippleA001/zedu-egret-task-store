@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { supabaseNoStore } from "@/lib/supabase-server";
 
 // Supabase env config (single source; mirrors lib/supabase-server.ts serviceKey()).
 function baseUrl() {
@@ -27,7 +28,7 @@ function serviceKey() {
 
 // Service-role client for privileged DB reads/writes (bypasses RLS).
 export function serviceClient() {
-  return createClient(baseUrl(), serviceKey());
+  return createClient(baseUrl(), serviceKey(), supabaseNoStore);
 }
 
 // Resolve the caller's Supabase user id for user-scoped API routes.
@@ -41,6 +42,7 @@ export async function authUserId(
   const jar = cookies();
   const authed = createServerClient(baseUrl(), anonKey(), {
     cookies: { getAll: () => jar.getAll(), setAll: () => {} },
+    ...supabaseNoStore,
   });
   const { data } = await authed.auth.getUser();
   if (data?.user?.id) return data.user.id;
@@ -48,7 +50,7 @@ export async function authUserId(
   const header = request?.headers.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token) return null;
-  const direct = createClient(baseUrl(), anonKey());
+  const direct = createClient(baseUrl(), anonKey(), supabaseNoStore);
   const { data: viaToken } = await direct.auth.getUser(token);
   return viaToken?.user?.id ?? null;
 }
@@ -61,6 +63,7 @@ export async function authUser(request?: Request): Promise<{
   const jar = cookies();
   const authed = createServerClient(baseUrl(), anonKey(), {
     cookies: { getAll: () => jar.getAll(), setAll: () => {} },
+    ...supabaseNoStore,
   });
   const { data } = await authed.auth.getUser();
   if (data?.user?.id)
@@ -69,7 +72,7 @@ export async function authUser(request?: Request): Promise<{
   const header = request?.headers.get("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
   if (!token) return null;
-  const direct = createClient(baseUrl(), anonKey());
+  const direct = createClient(baseUrl(), anonKey(), supabaseNoStore);
   const { data: viaToken } = await direct.auth.getUser(token);
   if (!viaToken?.user?.id) return null;
   return { id: viaToken.user.id, email: viaToken.user.email ?? undefined };
