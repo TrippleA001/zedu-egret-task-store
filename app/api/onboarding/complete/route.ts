@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { supabaseNoStore } from "@/lib/supabase-server";
 import { authUser } from "@/lib/api-auth";
 import {
   normalizeEmail,
@@ -38,7 +39,8 @@ export async function POST(request: Request) {
 
     const svc = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)!
+      (process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY)!,
+      supabaseNoStore
     );
 
     // Already onboarded?

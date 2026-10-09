@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
+import { supabaseNoStore } from "@/lib/supabase-server";
 
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
@@ -19,6 +20,7 @@ export async function GET(request: Request) {
             toSet.forEach(({ name, value, options }: any) => store.set(name, value, options));
           },
         },
+        ...supabaseNoStore,
       }
     );
     const { error } = await supabase.auth.exchangeCodeForSession(code);
