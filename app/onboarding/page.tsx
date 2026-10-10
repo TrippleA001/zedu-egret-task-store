@@ -4,13 +4,17 @@ import { useEffect, useState } from "react";
 
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
+import { isMaskedEmail } from "@/lib/validation";
 import { Alert, Field, Stepper, btnPrimary, inputCls } from "../components/ui";
 
 type EmailItem = { email: string; hint: string };
+type OrgItem = { id: string; name: string };
 
 export default function OnboardingPage() {
   const router = useRouter();
   const [authEmail, setAuthEmail] = useState("");
+  const [orgs, setOrgs] = useState<OrgItem[]>([]);
+  const [orgId, setOrgId] = useState("");
   const [options, setOptions] = useState<EmailItem[]>([]);
   const [q, setQ] = useState("");
   const [workspaceEmail, setWorkspaceEmail] = useState("");
@@ -28,12 +32,21 @@ export default function OnboardingPage() {
       setAuthEmail(data.user.email || "");
       const { data: prof } = await sb.from("users").select("id").eq("id", data.user.id).maybeSingle();
       if (prof) router.replace("/");
+      // Org list is readable by signed-in users (RLS). Empty/failed list just
+      // means the email search runs without an org filter.
+      const { data: orgList } = await sb.from("organizations").select("id, name").order("name");
+      if (orgList && orgList.length > 0) {
+        setOrgs(orgList);
+        setOrgId((prev) => prev || orgList[0].id);
+      }
     })();
   }, [router]);
 
   useEffect(() => {
+    if (isMaskedEmail(q)) return; // a picked suggestion — nothing left to search
     const t = setTimeout(async () => {
-      const r = await fetch(`/api/roster/emails?q=${encodeURIComponent(q)}&limit=50`);
+      const orgQs = orgId ? `&org_id=${encodeURIComponent(orgId)}` : "";
+      const r = await fetch(`/api/roster/emails?q=${encodeURIComponent(q)}${orgQs}&limit=50`);
       const j = await r.json();
       if (j.items) {
         setOptions(j.items);
@@ -42,7 +55,7 @@ export default function OnboardingPage() {
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, orgId]);
 
   const verify = async () => {
     setBusy(true); setMsg(null);
@@ -74,14 +87,35 @@ export default function OnboardingPage() {
       {step === 1 && (
         <div className="mt-4 rounded-xl border border-line bg-white p-6 shadow-sm sm:p-8">
           <h2 className="text-lg font-bold text-ink">Find your registration</h2>
-          <p className="mt-1 text-sm text-muted">Type your registration email to find it, then confirm it with your Zedu ID.</p>
+          <p className="mt-1 text-sm text-muted">Pick your organization, find your registration email, then confirm it with your Zedu ID.</p>
+          {orgs.length > 0 && (
+            <div className="mt-5">
+              <Field label="Organization" hint="The program whose registration list you appear on.">
+                <select
+                  className={inputCls}
+                  value={orgId}
+                  onChange={(e) => { setOrgId(e.target.value); setWorkspaceEmail(""); }}
+                >
+                  {orgs.map((o) => (
+                    <option key={o.id} value={o.id}>{o.name}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          )}
           <div className="mt-5">
-            <Field label="Registration email" hint="The email you registered with. Start typing below to find it — it may differ from your Google login.">
+            <Field label="Registration email" hint="The email you registered with. Start typing below to find it — only a masked preview (abcd***@domain) is shown until you verify.">
               <input
                 className={inputCls}
                 placeholder="Start typing your registration email..."
                 value={q}
-                onChange={(e) => { setQ(e.target.value); setWorkspaceEmail(""); }}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setQ(v);
+                  // Picking a suggestion puts its mask in the input — that IS
+                  // the selection; typing free text clears it.
+                  setWorkspaceEmail(isMaskedEmail(v) ? v : "");
+                }}
                 list="registration-emails"
                 autoComplete="off"
               />
