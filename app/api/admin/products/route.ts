@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { authUser, isAdminUser, serviceClient } from "@/lib/api-auth";
+import { activeOrgId } from "@/lib/org";
 import { sanitizeText, submissionSchemaError } from "@/lib/validation";
 
 // `is_active` = catalog visibility; `is_open` = purchasable gate enforced
@@ -82,6 +83,7 @@ export async function POST(request: Request) {
         is_active: body.is_active !== false,
         is_open: body.is_open === true,
         submission_schema: cleanSchema(body.submission_schema ?? []),
+        org_id: await activeOrgId(user.id, svc),
       })
       .select("*")
       .single();

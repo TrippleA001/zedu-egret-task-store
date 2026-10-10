@@ -132,11 +132,11 @@ export async function POST(request: Request) {
 
     if (stageNumber > 1) {
       const { data: prev } = await svc.from("submissions").select("id")
-        .eq("user_id", userId).eq("stage_number", stageNumber - 1).maybeSingle();
+        .eq("user_id", userId).eq("org_id", product.org_id).eq("stage_number", stageNumber - 1).maybeSingle();
       if (!prev) return NextResponse.json({ error: `Task ${stageNumber - 1} required first` }, { status: 423 });
     }
     const { data: dup } = await svc.from("submissions").select("id")
-      .eq("user_id", userId).eq("stage_number", stageNumber).maybeSingle();
+      .eq("user_id", userId).eq("org_id", product.org_id).eq("stage_number", stageNumber).maybeSingle();
     if (dup) return NextResponse.json({ error: "Already submitted for this task" }, { status: 409 });
 
     // Schema-driven field validation (driven by the product's
@@ -162,7 +162,7 @@ export async function POST(request: Request) {
     const taskRepoUrl = String(values.github_repo || values.mobile_repo || values.taskRepoUrl || "");
 
     const { error: sErr } = await svc.from("submissions").insert({
-      user_id: userId, stage_number: stageNumber, todo_app_url: todoAppUrl, task_repo_url: taskRepoUrl, values,
+      user_id: userId, org_id: product.org_id, stage_number: stageNumber, todo_app_url: todoAppUrl, task_repo_url: taskRepoUrl, values,
     });
     if (sErr) {
       if (String(sErr.message).includes("duplicate")) return NextResponse.json({ error: "Already submitted" }, { status: 409 });
@@ -173,7 +173,7 @@ export async function POST(request: Request) {
     let orderId: string | null = null;
     for (let i = 0; i < 3; i++) {
       const { data, error } = await svc.from("orders")
-        .insert({ user_id: userId, product_id: productId, status: "fulfilled", order_number: orderNumber })
+        .insert({ user_id: userId, org_id: product.org_id, product_id: productId, status: "fulfilled", order_number: orderNumber })
         .select("id").single();
       if (!error) { orderId = data.id; break; }
       if (!String(error.message).includes("duplicate")) throw error;
