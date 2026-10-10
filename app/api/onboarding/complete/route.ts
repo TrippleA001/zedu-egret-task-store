@@ -2,8 +2,9 @@ import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { supabaseNoStore } from "@/lib/supabase-server";
 import { authUser } from "@/lib/api-auth";
+import { defaultOrgId } from "@/lib/org";
+import { resolveRosterIdentity } from "@/lib/roster";
 import {
-  normalizeEmail,
   normalizeTelegram,
   normalizeZeduId,
   sanitizeText,
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
 
     const body = await request.json();
-    const workspace_email = normalizeEmail(String(body?.workspace_email || ""));
+    const workspace_email = String(body?.workspace_email || "");
     const zedu_id = normalizeZeduId(String(body?.zedu_id || ""));
     const full_name = sanitizeText(String(body?.full_name || ""));
     const github_url = sanitizeText(String(body?.github_url || ""), 500);
@@ -47,34 +48,32 @@ export async function POST(request: Request) {
     const { data: existing } = await svc.from("users").select("id").eq("id", user.id).maybeSingle();
     if (existing) return NextResponse.json({ error: "Already onboarded" }, { status: 409 });
 
-    // Verify pair
-    const { data: row, error: rErr } = await svc
-      .from("roster")
-      .select("email, zedu_id, claimed_by")
-      .eq("email", workspace_email)
-      .maybeSingle();
-    if (rErr) throw rErr;
-    if (!row) return NextResponse.json({ error: "No registration found for that email — check the spelling." }, { status: 404 });
-    if (row.claimed_by) return NextResponse.json({ error: "This email has already been claimed. Contact support." }, { status: 409 });
-    if (normalizeZeduId(String(row.zedu_id)) !== zedu_id)
-      return NextResponse.json({ error: "That Zedu ID doesn't match this email. Check your registration email." }, { status: 403 });
+    // Verify pair (accepts the masked dropdown form) and resolve the real row
+    const resolved = await resolveRosterIdentity(svc, workspace_email, zedu_id);
+    if ("error" in resolved)
+      return NextResponse.json({ error: resolved.error }, { status: resolved.status });
+    const row = resolved.row;
 
     // Atomic claim (fails if raced)
     const { data: claimed, error: cErr } = await svc
       .from("roster")
       .update({ claimed_by: user.id, claimed_at: new Date().toISOString() })
-      .eq("email", workspace_email)
+      .eq("email", row.email)
       .is("claimed_by", null)
       .select("email");
     if (cErr) throw cErr;
     if (!claimed || claimed.length === 0)
       return NextResponse.json({ error: "Someone just claimed this email. Contact support." }, { status: 409 });
 
+    // The registration's org becomes the member's working org. Rows imported
+    // without an org fall back to the default org (lib/org.ts does the same).
+    const orgId = row.org_id || (await defaultOrgId(svc));
+
     // Insert permanent user (denormalized — roster can be dropped later)
     const { error: uErr } = await svc.from("users").insert({
       id: user.id,
       auth_email: user.email,
-      workspace_email,
+      workspace_email: row.email,
       zedu_id,
       full_name,
       github_url,
@@ -82,15 +81,18 @@ export async function POST(request: Request) {
       sub_team: null, // greyed out — auto-assigned later
       skill_rating,
       channels_verified: true,
+      active_org_id: orgId,
     });
     if (uErr) {
       // Roll back claim so the email stays claimable
-      await svc.from("roster").update({ claimed_by: null, claimed_at: null }).eq("email", workspace_email);
+      await svc.from("roster").update({ claimed_by: null, claimed_at: null }).eq("email", row.email);
       // Surface duplicate nicely
       if (String(uErr.message).includes("duplicate"))
         return NextResponse.json({ error: "This identity is already registered" }, { status: 409 });
       throw uErr;
     }
+
+    await svc.from("user_orgs").upsert({ user_id: user.id, org_id: orgId }, { onConflict: "user_id,org_id" });
 
     return NextResponse.json({ ok: true });
   } catch (e: any) {
