@@ -1,15 +1,14 @@
 import Link from "next/link";
+import { authUser } from "@/lib/api-auth";
+import { activeOrgId } from "@/lib/org";
 import { parseGithubPr, parseGithubRepo } from "@/lib/validation";
 
 export const dynamic = "force-dynamic";
 
 /*
- * Deliberately NOT using @supabase/supabase-js here: createClient() eagerly
- * builds a RealtimeClient, which throws "Node.js detected but native WebSocket
- * not found" on runtimes without a global WebSocket (Node < 22, some Vercel
- * runtimes). This page only needs REST, so a plain fetch call is enough and
- * works on any Node version. It also surfaces a clear message when the env
- * vars are missing on the deployed host.
+ * Data queries stay plain REST; auth and org resolution use the shared server
+ * helpers (same pattern as the admin page). Missing env vars surface a clear
+ * message instead of a stack trace.
  */
 type SubmissionRow = {
   stage_number: number;
@@ -50,14 +49,12 @@ async function loadData(): Promise<PageData> {
 
   try {
     // Board is scoped to one org so a second org's submissions can never
-    // leak onto the public list; today that is the default (backfill) org.
+    // leak onto the public list; signed-in viewers see their active org and
+    // everyone else the default org. If the resolver fails (migration not
+    // run yet) the filter is dropped, matching the pre-tenancy view.
     let orgId = "";
     try {
-      const orgRes = await fetch(
-        `${url}/rest/v1/organizations?select=id&slug=eq.zedu-egret`,
-        { headers, cache: "no-store" }
-      );
-      if (orgRes.ok) orgId = ((await orgRes.json()) as Array<{ id: string }>)[0]?.id || "";
+      orgId = await activeOrgId((await authUser())?.id);
     } catch {
       orgId = "";
     }

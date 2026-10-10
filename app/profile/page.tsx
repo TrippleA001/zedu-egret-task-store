@@ -44,7 +44,10 @@ type Profile = {
   telegram_handle: string;
   sub_team: string | null;
   skill_rating: number;
+  active_org_id: string | null;
 };
+
+type OrgItem = { id: string; name: string };
 
 const PROFILE_FIELDS: Array<{
   key: keyof Profile;
@@ -78,6 +81,9 @@ export default function ProfilePage() {
   const [stages, setStages] = useState<number[]>([]);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [requests, setRequests] = useState<ChangeRequest[]>([]);
+  const [orgs, setOrgs] = useState<OrgItem[]>([]);
+  const [switching, setSwitching] = useState<string | null>(null);
+  const [orgErr, setOrgErr] = useState("");
   const [editing, setEditing] = useState<string | null>(null);
   const [editValue, setEditValue] = useState("");
   const [note, setNote] = useState("");
@@ -94,6 +100,37 @@ export default function ProfilePage() {
     setRequests((data as ChangeRequest[]) || []);
   };
 
+  const loadOrgs = async () => {
+    const sb = supabaseBrowser();
+    const { data } = await sb.from("user_orgs").select("org_id, organizations(name)");
+    const rows =
+      (data as Array<{
+        org_id: string;
+        organizations: { name: string } | Array<{ name: string }> | null;
+      }>) || [];
+    setOrgs(
+      rows
+        .map((r) => {
+          const o = Array.isArray(r.organizations) ? r.organizations[0] : r.organizations;
+          return { id: r.org_id, name: o?.name || "" };
+        })
+        .filter((o) => o.name)
+    );
+  };
+
+  const loadScoped = async (orgId: string) => {
+    const rp = await fetch("/api/products").then((r) => r.json());
+    if (rp.items) setProducts(rp.items);
+    const ro = await fetch("/api/orders").then((r) => r.json());
+    if (ro.stages) setStages(ro.stages);
+    const sb = supabaseBrowser();
+    const q = sb
+      .from("submissions")
+      .select("stage_number, values, todo_app_url, task_repo_url");
+    const { data } = orgId ? await q.eq("org_id", orgId) : await q;
+    setSubmissions((data as Submission[]) || []);
+  };
+
   useEffect(() => {
     (async () => {
       const sb = supabaseBrowser();
@@ -102,14 +139,8 @@ export default function ProfilePage() {
       const { data: prof } = await sb.from("users").select("*").eq("id", data.user.id).maybeSingle();
       if (!prof) { router.replace("/onboarding"); return; }
       setProfile(prof as Profile);
-      const rp = await fetch("/api/products").then((r) => r.json());
-      if (rp.items) setProducts(rp.items);
-      const ro = await fetch("/api/orders").then((r) => r.json());
-      if (ro.stages) setStages(ro.stages);
-      const rs = await sb.from("submissions")
-        .select("stage_number, values, todo_app_url, task_repo_url")
-        .eq("user_id", data.user.id);
-      setSubmissions((rs.data as Submission[]) || []);
+      await loadOrgs();
+      await loadScoped(prof.active_org_id || "");
       await loadRequests();
     })();
   }, [router]);
@@ -142,6 +173,25 @@ export default function ProfilePage() {
       setErr(e.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const switchOrg = async (orgId: string, name: string) => {
+    setSwitching(orgId); setOrgErr("");
+    try {
+      const r = await fetch("/api/me/active-org", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ org_id: orgId }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `Request failed (${r.status})`);
+      setProfile((p) => (p ? { ...p, active_org_id: orgId } : p));
+      await loadScoped(orgId);
+    } catch (e: any) {
+      setOrgErr(e.message);
+    } finally {
+      setSwitching(null);
     }
   };
 
@@ -263,6 +313,36 @@ export default function ProfilePage() {
             );
           })}
         </div>
+      </section>
+
+      <section aria-label="Organizations" className="mt-10">
+        <h2 className="text-lg font-extrabold tracking-tight text-ink">Organizations</h2>
+        <p className="mt-1 text-sm text-muted">
+          Switching is instant — the catalog and your task history re-scope to the selected organization.
+        </p>
+        {orgErr && <div className="mt-3"><Alert kind="error">{orgErr}</Alert></div>}
+        <ul className="mt-4 divide-y divide-line rounded-xl border border-line bg-white shadow-sm">
+          {orgs.map((o) => {
+            const active = o.id === (profile.active_org_id || orgs[0]?.id);
+            return (
+              <li key={o.id} className="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
+                <p className="text-sm font-semibold text-ink">{o.name}</p>
+                {active ? (
+                  <Badge tone="done">Active</Badge>
+                ) : (
+                  <button
+                    type="button"
+                    className={btnSecondary}
+                    disabled={switching !== null}
+                    onClick={() => void switchOrg(o.id, o.name)}
+                  >
+                    {switching === o.id ? "Switching…" : "Switch"}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       </section>
 
       <section aria-label="Task history" className="mt-10">

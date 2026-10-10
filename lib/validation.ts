@@ -185,3 +185,28 @@ export function generateOrderNumber() {
   for (let i = 0; i < 4; i++) suffix += chars[Math.floor(Math.random() * chars.length)];
   return `ZE-2026-${suffix}`;
 }
+
+// Onboarding only ever exposes abcd***@domain — the first four characters of
+// the local part plus the domain. The raw address never leaves the server.
+export function maskEmail(email: string): string {
+  const at = email.indexOf("@");
+  if (at <= 0) return email;
+  return `${email.slice(0, Math.min(4, at))}***${email.slice(at)}`;
+}
+
+// True when the value is a mask produced by maskEmail rather than a full email.
+export function isMaskedEmail(s: string): boolean {
+  return /^[^@*]+\*{3}@/.test(s.trim());
+}
+
+// Build a LIKE pattern for a masked email, escaping LIKE wildcards so a
+// crafted prefix/domain can't widen the match. Returns null for non-masks.
+export function maskedEmailLike(masked: string): string | null {
+  const t = masked.trim().toLowerCase();
+  if (!isMaskedEmail(t)) return null;
+  const [prefix, rest] = t.split("***");
+  const domain = rest.replace(/^@+/, "").replace(/[*%_\\]/g, "");
+  const head = prefix.replace(/[*%_\\]/g, "");
+  if (!head || !domain || domain.includes("@")) return null;
+  return `${head}%@${domain}`;
+}

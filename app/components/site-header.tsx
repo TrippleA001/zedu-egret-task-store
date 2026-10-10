@@ -20,7 +20,6 @@ function navLinks(pathname: string) {
     { href: "/", label: "Catalog" },
     { href: "/profile", label: "Profile" },
     { href: "/contributors", label: "Contributors" },
-    { href: "/onboarding", label: "Onboarding" },
   ];
   return items.map((n) => {
     const active = pathname === n.href;
@@ -223,7 +222,6 @@ export default function SiteHeader({ cartCount, onCartOpen }: {
           <Link href="/" className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${pathname === "/" ? "bg-canvas text-ink" : "text-muted"}`}>Catalog</Link>
           <Link href="/profile" className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${pathname === "/profile" ? "bg-canvas text-ink" : "text-muted"}`}>Profile</Link>
           <Link href="/contributors" className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${pathname === "/contributors" ? "bg-canvas text-ink" : "text-muted"}`}>Contributors</Link>
-          <Link href="/onboarding" className={`block rounded-lg px-3 py-2.5 text-sm font-semibold ${pathname === "/onboarding" ? "bg-canvas text-ink" : "text-muted"}`}>Onboarding</Link>
         </nav>
       )}
     </header>

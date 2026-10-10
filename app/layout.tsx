@@ -36,7 +36,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <nav className="flex flex-wrap gap-x-6 gap-y-2 text-[13px] font-medium" aria-label="Footer">
                 <Link href="/">Catalog</Link>
                 <Link href="/contributors">Contributors</Link>
-                <Link href="/onboarding">Onboarding</Link>
               </nav>
             </div>
             <div className="mt-8 flex flex-col gap-1 border-t border-line pt-6 text-[12px] text-muted sm:flex-row sm:justify-between">
