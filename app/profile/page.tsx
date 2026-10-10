@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
+import { requiredStages } from "@/lib/policy";
 import { SKILL_LEVELS } from "@/lib/constants";
 import { Alert, Badge, btnPrimary, btnSecondary, inputCls } from "../components/ui";
 
@@ -11,6 +12,7 @@ type Product = {
   title: string;
   stage_number: number;
   week_number: number;
+  prereq_stages?: string | null;
   submission_schema?: Array<{
     key: string;
     label: string;
@@ -126,7 +128,8 @@ export default function ProfilePage() {
     const sb = supabaseBrowser();
     const q = sb
       .from("submissions")
-      .select("stage_number, values, todo_app_url, task_repo_url");
+      .select("stage_number, values, todo_app_url, task_repo_url")
+      .eq("is_current", true);
     const { data } = orgId ? await q.eq("org_id", orgId) : await q;
     setSubmissions((data as Submission[]) || []);
   };
@@ -195,7 +198,8 @@ export default function ProfilePage() {
     }
   };
 
-  const unlocked = (stage: number) => stage === 1 || stages.includes(stage - 1);
+  const unlocked = (p: Product) =>
+    requiredStages(p.prereq_stages, p.stage_number).every((s) => stages.includes(s));
   const subFor = (stage: number) => submissions.find((s) => s.stage_number === stage);
 
   const chipsFor = (p: Product, sub: Submission | undefined): Array<{ label: string; value: string }> => {
@@ -361,7 +365,8 @@ export default function ProfilePage() {
                   <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                     {weekProducts.map((p) => {
                       const done = stages.includes(p.stage_number);
-                      const open = unlocked(p.stage_number);
+                      const open = unlocked(p);
+                      const missing = requiredStages(p.prereq_stages, p.stage_number).filter((s) => !stages.includes(s));
                       const sub = subFor(p.stage_number);
                       const chips = chipsFor(p, sub);
                       const tone = done ? "done" : open ? "open" : "locked";
@@ -403,7 +408,11 @@ export default function ProfilePage() {
                           )}
                           {!done && (
                             <p className="mt-3 text-[13px] text-muted">
-                              {open ? "Not submitted yet — open the catalog to submit." : `Complete Task ${p.stage_number - 1} first.`}
+                              {open
+                                ? "Not submitted yet — open the catalog to submit."
+                                : missing.length === 1
+                                  ? `Complete Task ${missing[0]} first.`
+                                  : `Complete Tasks ${missing.join(", ")} first.`}
                             </p>
                           )}
                         </article>

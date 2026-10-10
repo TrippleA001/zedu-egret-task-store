@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { supabaseBrowser } from "@/lib/supabase-client";
+import { requiredStages } from "@/lib/policy";
 import { useCart } from "@/lib/use-cart";
 import { Alert, Badge, btnSecondary, inputCls } from "./components/ui";
 import CartDrawer from "./components/cart-drawer";
@@ -16,6 +17,7 @@ type Product = {
   stage_number: number;
   week_number: number;
   is_open?: boolean;
+  prereq_stages?: string | null;
   submission_schema?: Array<{
     key: string;
     label: string;
@@ -110,8 +112,8 @@ export default function StorePage() {
     };
   }, [userId, loadProducts, scheduleProductReload]);
 
-  const unlocked = (stage: number) =>
-    stage === 1 || stages.includes(stage - 1);
+  const missingFor = (p: Product) =>
+    requiredStages(p.prereq_stages, p.stage_number).filter((s) => !stages.includes(s));
 
   const checkout = async () => {
     if (!cart) return;
@@ -212,7 +214,8 @@ export default function StorePage() {
                 <div className="mt-4 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
           {weekProducts.map((p) => {
             const done = stages.includes(p.stage_number);
-            const open = unlocked(p.stage_number);
+            const missing = missingFor(p);
+            const open = missing.length === 0;
             const purchasable = p.is_open === true;
             return (
               <article key={p.id} className="group flex flex-col overflow-hidden rounded-xl border border-line bg-white shadow-sm transition hover:-translate-y-0.5 hover:border-muted/40 hover:shadow-lg">
@@ -246,7 +249,9 @@ export default function StorePage() {
                       </div>
                     ) : (
                       <span className="inline-flex w-full cursor-not-allowed items-center justify-center rounded-lg border border-line bg-canvas px-4 py-2.5 text-sm font-semibold text-muted">
-                        Complete Task {p.stage_number - 1} first
+                        {missing.length === 1
+                          ? `Complete Task ${missing[0]} first`
+                          : `Complete Tasks ${missing.join(", ")} first`}
                       </span>
                     )}
                   </div>
