@@ -49,8 +49,22 @@ async function loadData(): Promise<PageData> {
   };
 
   try {
+    // Board is scoped to one org so a second org's submissions can never
+    // leak onto the public list; today that is the default (backfill) org.
+    let orgId = "";
+    try {
+      const orgRes = await fetch(
+        `${url}/rest/v1/organizations?select=id&slug=eq.zedu-egret`,
+        { headers, cache: "no-store" }
+      );
+      if (orgRes.ok) orgId = ((await orgRes.json()) as Array<{ id: string }>)[0]?.id || "";
+    } catch {
+      orgId = "";
+    }
+    const orgFilter = orgId ? `&org_id=eq.${orgId}` : "";
+
     const res = await fetch(
-      `${url}/rest/v1/submissions?select=stage_number,values,users!inner(full_name,github_url)&order=verified_at.asc`,
+      `${url}/rest/v1/submissions?select=stage_number,values,users!inner(full_name,github_url)&order=verified_at.asc${orgFilter}`,
       { headers, cache: "no-store" }
     );
     if (!res.ok) {
@@ -107,7 +121,7 @@ async function loadData(): Promise<PageData> {
     let tasks: Task[] = [];
     try {
       const pres = await fetch(
-        `${url}/rest/v1/products?select=stage_number,week_number,title&order=stage_number.asc`,
+        `${url}/rest/v1/products?select=stage_number,week_number,title&order=stage_number.asc${orgFilter}`,
         { headers, cache: "no-store" }
       );
       if (pres.ok) tasks = ((await pres.json()) as ProductRow[]).map((p) => ({ ...p }));
