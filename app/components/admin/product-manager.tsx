@@ -150,6 +150,26 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
     }
   };
 
+  const remove = async (p: AdminProduct) => {
+    if (!window.confirm(`Delete "${p.title}" permanently? This cannot be undone.`)) return;
+    setBusy(true); setErr(""); setMsg("");
+    try {
+      const r = await fetch("/api/admin/products", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: p.id }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.error || `Delete failed (${r.status})`);
+      setMsg(`"${p.title}" deleted.`);
+      router.refresh();
+    } catch (e: any) {
+      setErr(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <section aria-label="Products">
       <div className="flex items-end justify-between gap-3">
@@ -249,6 +269,9 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
                 </button>
                 <button type="button" disabled={busy} className="text-[13px] font-semibold text-muted hover:text-ink hover:underline disabled:opacity-50" onClick={() => void toggleActive(p)}>
                   {p.is_active ? "Hide from catalog" : "Show in catalog"}
+                </button>
+                <button type="button" disabled={busy} className="ml-auto text-[13px] font-semibold text-danger hover:underline disabled:opacity-50" onClick={() => void remove(p)}>
+                  Delete
                 </button>
               </div>
             )}
