@@ -95,6 +95,8 @@ export default async function AdminPage() {
     week_number: p.week_number ?? 1,
     is_active: p.is_active !== false,
     is_open: p.is_open === true,
+    prereq_stages: p.prereq_stages ?? null,
+    attempts_policy: p.attempts_policy || "single",
     submission_schema: Array.isArray(p.submission_schema) ? p.submission_schema : [],
   }));
   const schemaFor = (stage: number): SchemaDef[] =>

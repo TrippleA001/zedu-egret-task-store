@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { authUser, isAdminUser, serviceClient } from "@/lib/api-auth";
 import { activeOrgId } from "@/lib/org";
+import { attemptsPolicyError, prereqStagesError } from "@/lib/policy";
 import { sanitizeText, submissionSchemaError } from "@/lib/validation";
 
 // `is_active` = catalog visibility; `is_open` = purchasable gate enforced
@@ -50,6 +51,14 @@ function fieldErrors(body: Record<string, unknown>, { creating }: { creating: bo
     const err = submissionSchemaError(body.submission_schema);
     if (err) return err;
   }
+  if (body.prereq_stages !== undefined && body.prereq_stages !== null) {
+    const err = prereqStagesError(String(body.prereq_stages));
+    if (err) return err;
+  }
+  if (body.attempts_policy !== undefined) {
+    const err = attemptsPolicyError(String(body.attempts_policy ?? ""));
+    if (err) return err;
+  }
   return null;
 }
 
@@ -71,6 +80,11 @@ export async function POST(request: Request) {
     const err = fieldErrors(body, { creating: true });
     if (err) return NextResponse.json({ error: err }, { status: 422 });
 
+    const stageNumber = Number(body.stage_number);
+    const prereqRaw = body.prereq_stages == null ? "" : String(body.prereq_stages).trim();
+    const selfErr = prereqStagesError(prereqRaw, stageNumber);
+    if (selfErr) return NextResponse.json({ error: selfErr }, { status: 422 });
+
     const svc = serviceClient();
     const viewer = await authUser(request);
     const { data, error } = await svc
@@ -79,11 +93,13 @@ export async function POST(request: Request) {
         title: sanitizeText(String(body.title), 255),
         description: body.description != null ? sanitizeText(String(body.description), 2000) : null,
         price: body.price != null ? Number(body.price) : 0,
-        stage_number: Number(body.stage_number),
+        stage_number: stageNumber,
         week_number: body.week_number != null ? Number(body.week_number) : 1,
         is_active: body.is_active !== false,
         is_open: body.is_open === true,
         submission_schema: cleanSchema(body.submission_schema ?? []),
+        prereq_stages: prereqRaw === "" ? null : prereqRaw,
+        attempts_policy: String(body.attempts_policy || "single"),
         org_id: await activeOrgId(viewer?.id, svc),
       })
       .select("*")
@@ -121,10 +137,32 @@ export async function PATCH(request: Request) {
     if (body.is_active !== undefined) patch.is_active = Boolean(body.is_active);
     if (body.is_open !== undefined) patch.is_open = Boolean(body.is_open);
     if (body.submission_schema !== undefined) patch.submission_schema = cleanSchema(body.submission_schema);
+    if (body.prereq_stages !== undefined) {
+      const raw = body.prereq_stages === null ? "" : String(body.prereq_stages).trim();
+      patch.prereq_stages = raw === "" ? null : raw;
+    }
+    if (body.attempts_policy !== undefined) patch.attempts_policy = String(body.attempts_policy);
     if (Object.keys(patch).length === 0)
       return NextResponse.json({ error: "Nothing to update" }, { status: 400 });
 
     const svc = serviceClient();
+    // Self-reference needs the FINAL stage + prereq pair, so a prereq-only
+    // patch validates against the stored stage (and vice versa).
+    if (patch.prereq_stages !== undefined || patch.stage_number !== undefined) {
+      const { data: product, error: pErr } = await svc
+        .from("products")
+        .select("stage_number, prereq_stages")
+        .eq("id", id)
+        .maybeSingle();
+      if (pErr) throw pErr;
+      if (!product) return NextResponse.json({ error: "Product not found" }, { status: 404 });
+      const nextStage = patch.stage_number !== undefined ? Number(patch.stage_number) : product.stage_number;
+      const nextPrereq =
+        patch.prereq_stages !== undefined ? String(patch.prereq_stages || "") : String(product.prereq_stages || "");
+      const selfErr = prereqStagesError(nextPrereq, nextStage);
+      if (selfErr) return NextResponse.json({ error: selfErr }, { status: 422 });
+    }
+
     const { data, error } = await svc.from("products").update(patch).eq("id", id).select("*").maybeSingle();
     if (error) {
       if (String(error.message).includes("duplicate"))

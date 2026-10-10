@@ -20,6 +20,8 @@ export type AdminProduct = {
   week_number: number;
   is_active: boolean;
   is_open: boolean;
+  prereq_stages: string | null;
+  attempts_policy: string;
   submission_schema: SchemaDef[];
 };
 
@@ -31,6 +33,8 @@ type FormState = {
   week_number: string;
   is_active: boolean;
   is_open: boolean;
+  prereq_stages: string;
+  attempts_policy: string;
   schemaText: string;
 };
 
@@ -42,6 +46,8 @@ const EMPTY_FORM: FormState = {
   week_number: "1",
   is_active: true,
   is_open: false,
+  prereq_stages: "",
+  attempts_policy: "single",
   schemaText: "",
 };
 
@@ -54,6 +60,8 @@ function formFor(p: AdminProduct): FormState {
     week_number: String(p.week_number ?? 1),
     is_active: p.is_active,
     is_open: p.is_open,
+    prereq_stages: p.prereq_stages || "",
+    attempts_policy: p.attempts_policy || "single",
     schemaText: JSON.stringify(p.submission_schema || [], null, 2),
   };
 }
@@ -95,6 +103,8 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
         week_number: Number(form.week_number),
         is_active: form.is_active,
         is_open: form.is_open,
+        prereq_stages: form.prereq_stages.trim(),
+        attempts_policy: form.attempts_policy,
         submission_schema: schema,
       };
       const r = await fetch("/api/admin/products", {
@@ -218,6 +228,30 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
               <input type="checkbox" checked={form.is_open} onChange={(e) => set({ is_open: e.target.checked })} className="h-4 w-4 accent-[var(--color-brand,#008060)]" />
               <span className="text-sm font-medium text-ink">Open (purchasable in checkout)</span>
             </label>
+            <label className="sm:col-span-2">
+              <span className="block text-sm font-medium text-ink">Prerequisite tasks</span>
+              <span className="mt-0.5 block text-[12px] text-muted">
+                Task numbers that must be completed first — e.g. "1-10, 15, 26". Empty = the previous task.
+              </span>
+              <input
+                className={`${inputCls} mt-1.5`}
+                value={form.prereq_stages}
+                onChange={(e) => set({ prereq_stages: e.target.value })}
+                placeholder="e.g. 1-10, 15 — empty = previous task"
+              />
+            </label>
+            <label>
+              <span className="block text-sm font-medium text-ink">Attempts policy</span>
+              <select
+                className={`${inputCls} mt-1.5`}
+                value={form.attempts_policy}
+                onChange={(e) => set({ attempts_policy: e.target.value })}
+              >
+                <option value="single">Single submission</option>
+                <option value="multiple">Keep all attempts</option>
+              </select>
+              <span className="mt-0.5 block text-[12px] text-muted">"Keep all attempts" lets members resubmit; every try is saved.</span>
+            </label>
             <label className="sm:col-span-2 lg:col-span-4">
               <span className="block text-sm font-medium text-ink">Submission schema (JSON)</span>
               <span className="mt-0.5 block text-[12px] text-muted">
@@ -260,6 +294,9 @@ export default function ProductManager({ products }: { products: AdminProduct[] 
               {(p.submission_schema || []).length > 0
                 ? `Form: ${(p.submission_schema || []).map((f) => f.key).join(", ")}`
                 : "No form configured — checkout disabled"}
+            </p>
+            <p className="truncate text-[12px] text-muted">
+              Prereqs: {p.prereq_stages || "previous task"} · Attempts: {p.attempts_policy === "multiple" ? "keep all" : "single"}
             </p>
             {editing !== p.id && (
               <div className="mt-3 flex items-center gap-3">
