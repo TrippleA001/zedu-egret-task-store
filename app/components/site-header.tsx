@@ -156,7 +156,7 @@ export default function SiteHeader({ cartCount, onCartOpen }: {
             )}
           </span>
           <span className="leading-tight">
-            <span className="block text-[16px] font-extrabold tracking-tight text-ink">Zedu Egret Store</span>
+            <span className="block text-[16px] font-extrabold tracking-tight text-ink">Zedu Store</span>
             <span className="block text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">Task milestones</span>
           </span>
         </Link>

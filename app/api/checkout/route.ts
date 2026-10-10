@@ -17,7 +17,7 @@ function githubHeaders(): Record<string, string> {
   return {
     Accept: "application/vnd.github+json",
     ...(pat && !pat.includes("placeholder") ? { Authorization: `Bearer ${pat}` } : {}),
-    "User-Agent": "zedu-egret-checkout/1.0",
+    "User-Agent": "zedu-store-checkout/1.0",
   };
 }
 
@@ -233,7 +233,7 @@ export async function POST(request: Request) {
     // deliver to authorized recipients, so the inbox is the real channel).
     const attemptSuffix = attemptNumber > 1 ? ` (attempt ${attemptNumber})` : "";
     const notifBody = prof
-      ? `Hi ${prof.full_name || ""},\n\nYour Task ${stageNumber} verification order ${orderNumber} is FULFILLED.${attemptSuffix}\n\nYour name will be added to the contributors list for the group task, keep working on your individual task.\n\n— Zedu Egret Store`
+      ? `Hi ${prof.full_name || ""},\n\nYour Task ${stageNumber} verification order ${orderNumber} is FULFILLED.${attemptSuffix}\n\nYour name will be added to the contributors list for the group task, keep working on your individual task.\n\n— Zedu Store`
       : `Your Task ${stageNumber} verification order ${orderNumber} is FULFILLED.${attemptSuffix}\n\nYour name will be added to the contributors list for the group task, keep working on your individual task.`;
     const { error: nErr } = await svc.from("notifications").insert({
       user_id: userId,

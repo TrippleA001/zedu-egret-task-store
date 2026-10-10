@@ -228,7 +228,7 @@ export default function StorePage() {
                   </span>
                 </div>
                 <div className="flex flex-1 flex-col p-5">
-                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Zedu Egret · Week {p.week_number ?? 1} · Task {p.stage_number}</p>
+                  <p className="text-[11px] font-semibold uppercase tracking-widest text-muted">Zedu Store · Week {p.week_number ?? 1} · Task {p.stage_number}</p>
                   <h3 className="mt-1 text-base font-bold text-ink">{p.title}</h3>
                   <p className="mt-1 line-clamp-3 text-sm text-muted">{p.description}</p>
                   <div className="mt-3 flex items-center gap-2">

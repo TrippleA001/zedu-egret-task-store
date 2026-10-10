@@ -16,7 +16,7 @@ export default function LoginPage() {
           <div className="mb-6 flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-deep text-base font-black text-white">Z</span>
             <div>
-              <p className="text-lg font-bold tracking-tight text-ink">Zedu Egret Store</p>
+              <p className="text-lg font-bold tracking-tight text-ink">Zedu Store</p>
               <p className="text-[11px] font-medium uppercase tracking-widest text-muted">Task milestones</p>
             </div>
           </div>
