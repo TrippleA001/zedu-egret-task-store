@@ -4,7 +4,7 @@ import "./globals.css";
 import SiteHeader from "./components/site-header";
 
 export const metadata: Metadata = {
-  title: "Zedu Egret Store",
+  title: "Zedu Store",
   description: "Task verification & onboarding portal",
 };
 
@@ -29,7 +29,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <div className="flex items-start gap-3">
                 <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-deep text-base font-black text-white">Z</span>
                 <div>
-                  <p className="text-sm font-bold text-ink">Zedu Egret Store</p>
+                  <p className="text-sm font-bold text-ink">Zedu Store</p>
                   <p className="text-[13px] text-muted">Task verification &amp; contributor onboarding</p>
                 </div>
               </div>
@@ -40,7 +40,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
             <div className="mt-8 flex flex-col gap-1 border-t border-line pt-6 text-[12px] text-muted sm:flex-row sm:justify-between">
               <p>Milestones are $0.00 products · Order receipts use the <span className="font-mono font-semibold text-ink">ZE-2026-XXXX</span> format.</p>
-              <p>© {new Date().getFullYear()} Zedu Egret</p>
+              <p>© {new Date().getFullYear()} Zedu Store</p>
             </div>
           </div>
         </footer>

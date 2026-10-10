@@ -6,7 +6,7 @@ export async function fetchWithTimeout(url: string, ms: number) {
       method: "GET",
       signal: ctrl.signal,
       redirect: "follow",
-      headers: { "User-Agent": "zedu-egret-checkout/1.0" },
+      headers: { "User-Agent": "zedu-store-checkout/1.0" },
     });
   } finally {
     clearTimeout(t);
@@ -19,7 +19,7 @@ export function receiptText(orderNumber: string, stage: number) {
   return (
     `Hi,\n\nYour Stage ${stage} verification order ${orderNumber} is FULFILLED.\n\n` +
     `Your name will be added to the contributors list for stage 2 group task, keep working on your individual task.\n\n` +
-    `— Zedu Egret Store`
+    `— Zedu Store`
   );
 }
 
@@ -32,7 +32,7 @@ export async function sendReceiptEmail(to: string, cc: string | null, orderNumbe
     return "skipped";
   }
   const form = new URLSearchParams();
-  form.set("from", `Zedu Egret Store <${from}>`);
+  form.set("from", `Zedu Store <${from}>`);
   form.set("to", to);
   if (cc && cc.toLowerCase() !== to.toLowerCase()) form.append("cc", cc);
   form.set("subject", `Order ${orderNumber} fulfilled - Stage ${stage}`);
