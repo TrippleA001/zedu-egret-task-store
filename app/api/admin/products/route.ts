@@ -72,6 +72,7 @@ export async function POST(request: Request) {
     if (err) return NextResponse.json({ error: err }, { status: 422 });
 
     const svc = serviceClient();
+    const viewer = await authUser(request);
     const { data, error } = await svc
       .from("products")
       .insert({
@@ -83,7 +84,7 @@ export async function POST(request: Request) {
         is_active: body.is_active !== false,
         is_open: body.is_open === true,
         submission_schema: cleanSchema(body.submission_schema ?? []),
-        org_id: await activeOrgId(user.id, svc),
+        org_id: await activeOrgId(viewer?.id, svc),
       })
       .select("*")
       .single();
