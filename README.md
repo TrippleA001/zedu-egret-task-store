@@ -55,6 +55,7 @@ Run in order in the Supabase SQL Editor:
 8. `supabase/migrations/008_task_open.sql` — `products.is_open` replaces the code-bound `TASK_OPEN` gate; backfills tasks 1–5 open, new tasks closed by default. Toggle per task from `/admin` (or set `is_open` directly)
 9. `supabase/migrations/009_products_realtime.sql` — live catalog updates: adds `products` to the `supabase_realtime` publication so open storefronts refetch the moment a task is edited from `/admin` (focus/visibility refetch covers clients opened before this migration runs)
 10. `supabase/migrations/010_organizations.sql` — multi-tenancy core: `organizations` + `user_orgs` junction + `users.active_org_id`; `org_id` on roster/products/orders/submissions; task numbers unique per org; backfills everything into a single `Zedu Egret` org so behavior is unchanged
+11. `supabase/migrations/011_task_policy.sql` — per-task policy: `products.prereq_stages` (range/list syntax, empty = previous stage) + `products.attempts_policy` (`single` | `multiple`); submissions gain `attempt_number` + `is_current` with one-current-attempt-per-task enforced by partial unique index (replaces the per-org unique user/stage rule)
 
 ## Opening a task later
 
