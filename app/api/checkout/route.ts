@@ -133,13 +133,13 @@ export async function POST(request: Request) {
 
     // Prereq gate: every stage listed in products.prereq_stages must have a
     // current submission in this org; empty config keeps the N-1 default.
-    const required = requiredStages(product.prereq_stages, stageNumber);
-    if (required.length > 0) {
+    const needStages = requiredStages(product.prereq_stages, stageNumber);
+    if (needStages.length > 0) {
       const { data: done } = await svc.from("submissions").select("stage_number")
         .eq("user_id", userId).eq("org_id", product.org_id).eq("is_current", true)
-        .in("stage_number", required);
+        .in("stage_number", needStages);
       const have = new Set((done || []).map((r: { stage_number: number }) => r.stage_number));
-      const missing = required.filter((s) => !have.has(s));
+      const missing = needStages.filter((s) => !have.has(s));
       if (missing.length > 0) {
         const list = missing.join(", ");
         return NextResponse.json(
