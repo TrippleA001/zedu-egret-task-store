@@ -54,6 +54,7 @@ Run in order in the Supabase SQL Editor:
 7. `supabase/migrations/007_task1_schema.sql` — moves Task 1's checkout form (deployed URL + GitHub repo) from a hardcoded fallback into its product row (admin-editable in `/admin`)
 8. `supabase/migrations/008_task_open.sql` — `products.is_open` replaces the code-bound `TASK_OPEN` gate; backfills tasks 1–5 open, new tasks closed by default. Toggle per task from `/admin` (or set `is_open` directly)
 9. `supabase/migrations/009_products_realtime.sql` — live catalog updates: adds `products` to the `supabase_realtime` publication so open storefronts refetch the moment a task is edited from `/admin` (focus/visibility refetch covers clients opened before this migration runs)
+10. `supabase/migrations/010_organizations.sql` — multi-tenancy core: `organizations` + `user_orgs` junction + `users.active_org_id`; `org_id` on roster/products/orders/submissions; task numbers unique per org; backfills everything into a single `Zedu Egret` org so behavior is unchanged
 
 ## Opening a task later
 
