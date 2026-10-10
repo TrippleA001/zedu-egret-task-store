@@ -8,14 +8,25 @@ export default function SuccessPanel({ orderNumber, stage, email }: {
 }) {
   useEffect(() => {
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    confetti({
-      particleCount: 120,
-      spread: 75,
-      origin: { y: 0.25 },
-      colors: ["#008060", "#004c3f", "#cdeee1", "#f59e0b"],
-      disableForReducedMotion: true,
-    });
+    const colors = ["#008060", "#004c3f", "#cdeee1", "#f59e0b", "#ffffff"];
+    const common = { colors, disableForReducedMotion: true, zIndex: 100 };
+    confetti({ particleCount: 180, spread: 100, origin: { y: 0.3 }, ...common });
+    // Side cannons + a delayed finale so every submission lands as a sequence,
+    // not a single puff.
+    const t1 = setTimeout(() => {
+      confetti({ particleCount: 100, angle: 60, spread: 70, origin: { x: 0, y: 0.6 }, ...common });
+      confetti({ particleCount: 100, angle: 120, spread: 70, origin: { x: 1, y: 0.6 }, ...common });
+    }, 300);
+    const t2 = setTimeout(() => {
+      confetti({ particleCount: 240, spread: 160, startVelocity: 42, origin: { y: 0.25 }, scalar: 1.05, ...common });
+    }, 900);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
   }, []);
+
+  const lead =
+    stage === 1
+      ? "Task 1 verified — you're on the contributors board now. Keep the momentum going."
+      : `Task ${stage} verified and on your permanent record. On to the next one.`;
 
   return (
     <div className="mt-6 overflow-hidden rounded-xl border border-brand/30 bg-white shadow-sm">
@@ -27,9 +38,7 @@ export default function SuccessPanel({ orderNumber, stage, email }: {
       </div>
       <div className="px-5 py-5 sm:px-6">
         <p className="font-mono text-lg font-bold tracking-tight text-ink">{orderNumber}</p>
-        <p className="mt-2 text-[15px] leading-relaxed text-ink">
-          Your name will be added to the contributors list for stage 2 group task, keep working on your individual task.
-        </p>
+        <p className="mt-2 text-[15px] leading-relaxed text-ink">{lead}</p>
         <p className="mt-2 text-sm text-muted">
           {email === "sent"
             ? "Receipt emailed to you — a copy is also in your notifications bell."
