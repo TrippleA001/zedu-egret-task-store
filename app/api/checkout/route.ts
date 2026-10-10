@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isBlockedHost, isHttpsUrl, parseDriveUrl, parseGithubPr, parseGithubRepo, generateOrderNumber } from "@/lib/validation";
 import { fetchWithTimeout, sendReceiptEmail, triggerContributorsBuild } from "@/lib/side-effects";
 import { authUser, serviceClient } from "@/lib/api-auth";
+import { requiredStages } from "@/lib/policy";
 
 export type SchemaField = {
   key: string;
@@ -130,14 +131,36 @@ export async function POST(request: Request) {
         { status: 423 },
       );
 
-    if (stageNumber > 1) {
-      const { data: prev } = await svc.from("submissions").select("id")
-        .eq("user_id", userId).eq("org_id", product.org_id).eq("stage_number", stageNumber - 1).maybeSingle();
-      if (!prev) return NextResponse.json({ error: `Task ${stageNumber - 1} required first` }, { status: 423 });
+    // Prereq gate: every stage listed in products.prereq_stages must have a
+    // current submission in this org; empty config keeps the N-1 default.
+    const required = requiredStages(product.prereq_stages, stageNumber);
+    if (required.length > 0) {
+      const { data: done } = await svc.from("submissions").select("stage_number")
+        .eq("user_id", userId).eq("org_id", product.org_id).eq("is_current", true)
+        .in("stage_number", required);
+      const have = new Set((done || []).map((r: { stage_number: number }) => r.stage_number));
+      const missing = required.filter((s) => !have.has(s));
+      if (missing.length > 0) {
+        const list = missing.join(", ");
+        return NextResponse.json(
+          {
+            error: missing.length === 1
+              ? `Task ${list} required first`
+              : `Tasks ${list} required first`,
+          },
+          { status: 423 },
+        );
+      }
     }
-    const { data: dup } = await svc.from("submissions").select("id")
-      .eq("user_id", userId).eq("org_id", product.org_id).eq("stage_number", stageNumber).maybeSingle();
-    if (dup) return NextResponse.json({ error: "Already submitted for this task" }, { status: 409 });
+
+    // Attempt policy: 'single' keeps the historic one-submission rule (409);
+    // 'multiple' lets every checkout save a new attempt (history preserved).
+    const multiple = product.attempts_policy === "multiple";
+    if (!multiple) {
+      const { data: dup } = await svc.from("submissions").select("id")
+        .eq("user_id", userId).eq("org_id", product.org_id).eq("stage_number", stageNumber).maybeSingle();
+      if (dup) return NextResponse.json({ error: "Already submitted for this task" }, { status: 409 });
+    }
 
     // Schema-driven field validation (driven by the product's
     // submission_schema; required keys must all be present + valid).
@@ -161,10 +184,33 @@ export async function POST(request: Request) {
     const todoAppUrl = String(values.deployed_url || values.todoAppUrl || "");
     const taskRepoUrl = String(values.github_repo || values.mobile_repo || values.taskRepoUrl || "");
 
+    // Multiple attempts: number the new row and retire the previous current
+    // one. The flip happens before the insert, so a failed insert restores
+    // it — a validation error must not leave the task looking incomplete.
+    let attemptNumber = 1;
+    if (multiple) {
+      const { data: last } = await svc.from("submissions").select("attempt_number")
+        .eq("user_id", userId).eq("org_id", product.org_id).eq("stage_number", stageNumber)
+        .order("attempt_number", { ascending: false }).limit(1).maybeSingle();
+      attemptNumber = (last?.attempt_number ?? 0) + 1;
+      const { error: curErr } = await svc.from("submissions").update({ is_current: false })
+        .eq("user_id", userId).eq("org_id", product.org_id).eq("stage_number", stageNumber)
+        .eq("is_current", true);
+      if (curErr) throw curErr;
+    }
+
     const { error: sErr } = await svc.from("submissions").insert({
-      user_id: userId, org_id: product.org_id, stage_number: stageNumber, todo_app_url: todoAppUrl, task_repo_url: taskRepoUrl, values,
+      user_id: userId, org_id: product.org_id, stage_number: stageNumber,
+      todo_app_url: todoAppUrl, task_repo_url: taskRepoUrl, values,
+      attempt_number: attemptNumber, is_current: true,
     });
     if (sErr) {
+      if (multiple) {
+        await svc.from("submissions").update({ is_current: true })
+          .eq("user_id", userId).eq("org_id", product.org_id).eq("stage_number", stageNumber)
+          .eq("attempt_number", attemptNumber - 1)
+          .then(({ error }) => { if (error) console.error("[submissions:current-restore-failed]", error.message); });
+      }
       if (String(sErr.message).includes("duplicate")) return NextResponse.json({ error: "Already submitted" }, { status: 409 });
       throw sErr;
     }
@@ -185,13 +231,14 @@ export async function POST(request: Request) {
 
     // In-account notification (mirrors the email — sandbox domains only
     // deliver to authorized recipients, so the inbox is the real channel).
+    const attemptSuffix = attemptNumber > 1 ? ` (attempt ${attemptNumber})` : "";
     const notifBody = prof
-      ? `Hi ${prof.full_name || ""},\n\nYour Task ${stageNumber} verification order ${orderNumber} is FULFILLED.\n\nYour name will be added to the contributors list for the group task, keep working on your individual task.\n\n— Zedu Egret Store`
-      : `Your Task ${stageNumber} verification order ${orderNumber} is FULFILLED.\n\nYour name will be added to the contributors list for the group task, keep working on your individual task.`;
+      ? `Hi ${prof.full_name || ""},\n\nYour Task ${stageNumber} verification order ${orderNumber} is FULFILLED.${attemptSuffix}\n\nYour name will be added to the contributors list for the group task, keep working on your individual task.\n\n— Zedu Egret Store`
+      : `Your Task ${stageNumber} verification order ${orderNumber} is FULFILLED.${attemptSuffix}\n\nYour name will be added to the contributors list for the group task, keep working on your individual task.`;
     const { error: nErr } = await svc.from("notifications").insert({
       user_id: userId,
       kind: "order_fulfilled",
-      title: `Task ${stageNumber} complete — order ${orderNumber}`,
+      title: `Task ${stageNumber} complete — order ${orderNumber}${attemptSuffix}`,
       body: notifBody,
       order_number: orderNumber,
     });

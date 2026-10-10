@@ -61,7 +61,7 @@ async function loadData(): Promise<PageData> {
     const orgFilter = orgId ? `&org_id=eq.${orgId}` : "";
 
     const res = await fetch(
-      `${url}/rest/v1/submissions?select=stage_number,values,users!inner(full_name,github_url)&order=verified_at.asc${orgFilter}`,
+      `${url}/rest/v1/submissions?select=stage_number,values,users!inner(full_name,github_url)&order=verified_at.asc&is_current=eq.true${orgFilter}`,
       { headers, cache: "no-store" }
     );
     if (!res.ok) {
